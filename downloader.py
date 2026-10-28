@@ -14,7 +14,7 @@ try:
 except ImportError:
     yt_dlp = None
 
-# Bỏ qua lỗi SSL xác thực chứng chỉ thường gặp trên macOS
+# Bỏ qua lỗi SSL xác thực chứng chỉ thường gặp trên macOS / container
 SSL_CONTEXT = ssl._create_unverified_context()
 
 def get_yt_dlp():
@@ -25,14 +25,18 @@ def get_yt_dlp():
 def is_tiktok_url(url: str) -> bool:
     return "tiktok.com" in url.lower()
 
-def ensure_ios_compatibility(filepath: str) -> str:
+def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """
-    Chuẩn hóa video sang chuẩn tương thích tuyệt đối 100% với Apple iOS (Photos/Cuộn camera) và TikTok:
-    - Video Codec: H.264 (AVC) với pixel format yuv420p (8-bit)
-    - Audio Codec: AAC (bắt buộc trên iOS, Apple cấm Opus/Vorbis trong MP4)
-    - FastStart: Đặt moov atom lên đầu file để iOS đọc tức thì
+    Chuẩn hóa video tương thích iOS siêu tốc, tối ưu hóa triệt để cho máy chủ Cloud (0.1 CPU):
+    - Video TikTok: Giữ nguyên 100% (đã chuẩn H.264 + AAC từ CDN), không tốn 1ms CPU.
+    - Video khác (FB/YouTube): Chỉ chuyển đổi âm thanh sang AAC nếu là Opus (rất nhẹ, <0.2s).
+    - Chỉ re-encode video nếu bắt buộc là VP9/AV1 với preset ultrafast để tránh treo CPU.
     """
     if not filepath or not filepath.endswith(".mp4") or not os.path.exists(filepath):
+        return filepath
+
+    # TikTok từ CDN vốn dĩ đã là H.264/AAC tương thích mọi thiết bị, không cần can thiệp
+    if is_tiktok:
         return filepath
 
     ffmpeg_bin = shutil.which("ffmpeg")
@@ -44,35 +48,42 @@ def ensure_ios_compatibility(filepath: str) -> str:
     base_name = os.path.basename(filepath)
     temp_ios_file = os.path.join(dir_name, f"ios_compat_{base_name}")
 
-    v_codec = ""
-    a_codec = ""
-    pix_fmt = ""
+    v_codec = "h264"
+    a_codec = "aac"
 
     if ffprobe_bin:
         try:
             res_v = subprocess.run(
                 [ffprobe_bin, "-v", "error", "-select_streams", "v:0",
-                 "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", filepath],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10
+                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5
             )
-            v_info = res_v.stdout.strip().split(',')
-            if len(v_info) >= 1:
-                v_codec = v_info[0]
-            if len(v_info) >= 2:
-                pix_fmt = v_info[1]
+            v_codec = res_v.stdout.strip().lower()
 
             res_a = subprocess.run(
                 [ffprobe_bin, "-v", "error", "-select_streams", "a:0",
                  "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5
             )
-            a_codec = res_a.stdout.strip()
+            a_codec = res_a.stdout.strip().lower()
         except Exception:
             pass
 
-    # Nếu video đã là h264 yuv420p và audio là aac, chỉ copy nhanh
-    v_args = ["-c:v", "copy"] if (v_codec == "h264" and pix_fmt == "yuv420p") else ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast"]
-    a_args = ["-c:a", "copy"] if (a_codec == "aac") else ["-c:a", "aac", "-b:a", "192k"]
+    # Chỉ re-encode nếu video là VP9 hoặc AV1 (iOS không hỗ trợ)
+    if v_codec in ["vp9", "av01", "av1"]:
+        v_args = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast"]
+    else:
+        v_args = ["-c:v", "copy"]
+
+    # Nếu audio là Opus/Vorbis (FB Reels), chuyển sang AAC (siêu nhẹ, <0.2s)
+    if a_codec not in ["aac", "mp4a"]:
+        a_args = ["-c:a", "aac", "-b:a", "128k"]
+    else:
+        a_args = ["-c:a", "copy"]
+
+    # Nếu cả 2 đều đã chuẩn thì không cần chạy ffmpeg
+    if v_args == ["-c:v", "copy"] and a_args == ["-c:a", "copy"]:
+        return filepath
 
     cmd = [
         ffmpeg_bin, "-y", "-i", filepath,
@@ -83,10 +94,10 @@ def ensure_ios_compatibility(filepath: str) -> str:
     ]
 
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
         if proc.returncode == 0 and os.path.exists(temp_ios_file) and os.path.getsize(temp_ios_file) > 1000:
             os.replace(temp_ios_file, filepath)
-            print("[✓] Đã chuẩn hóa video tương thích 100% với iOS Photos & TikTok (H.264 + AAC).")
+            print("[✓] Đã chuẩn hóa video tương thích iOS siêu tốc.")
     except Exception as e:
         print(f"[!] Bỏ qua bước chuẩn hóa iOS do: {e}")
         if os.path.exists(temp_ios_file):
@@ -151,23 +162,20 @@ def download_tiktok_fallback(url: str, output_dir: str = None) -> str:
         album_dir = os.path.join(output_dir, album_dir_name)
         os.makedirs(album_dir, exist_ok=True)
         
-        print(f"\n[*] Bài đăng gồm {len(images)} ảnh.")
-        print(f"[*] Đang tải trọn bộ ảnh HD và nhạc nền vào: {album_dir}...")
-
         for i, img_url in enumerate(images, start=1):
             img_file = os.path.join(album_dir, f"anh_{i:02d}.jpeg")
             try:
                 req = urllib.request.Request(img_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r, open(img_file, 'wb') as f:
+                with urllib.request.urlopen(req, timeout=15, context=SSL_CONTEXT) as r, open(img_file, 'wb') as f:
                     f.write(r.read())
-            except Exception as e:
-                print(f"[!] Lỗi tải ảnh {i}: {e}")
+            except Exception:
+                pass
 
         if info.get('music'):
             music_file = os.path.join(album_dir, "nhac_nen.mp3")
             try:
                 req = urllib.request.Request(info['music'], headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r, open(music_file, 'wb') as f:
+                with urllib.request.urlopen(req, timeout=15, context=SSL_CONTEXT) as r, open(music_file, 'wb') as f:
                     f.write(r.read())
             except Exception:
                 pass
@@ -175,8 +183,6 @@ def download_tiktok_fallback(url: str, output_dir: str = None) -> str:
         zip_path_base = os.path.join(output_dir, album_dir_name)
         shutil.make_archive(zip_path_base, 'zip', album_dir)
         final_zip = f"{zip_path_base}.zip"
-
-        print(f"[✓] Đã lưu xong album ảnh tại: {final_zip}")
         return final_zip
 
     # TRƯỜNG HỢP 2: VIDEO CLIP THÔNG THƯỜNG (MP4 KHÔNG LOGO)
@@ -185,18 +191,16 @@ def download_tiktok_fallback(url: str, output_dir: str = None) -> str:
         raise RuntimeError("Không tìm thấy đường dẫn video trực tiếp từ máy chủ")
         
     output_filename = os.path.join(output_dir, f"{safe_title} [{video_id}].mp4")
-    print(f"[*] Đang tải video MP4 chất lượng cao (không dính watermark)...")
     
     req = urllib.request.Request(direct_url, headers={
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     })
     
-    with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as resp, open(output_filename, 'wb') as f:
+    with urllib.request.urlopen(req, timeout=25, context=SSL_CONTEXT) as resp, open(output_filename, 'wb') as f:
         while chunk := resp.read(65536):
             f.write(chunk)
             
-    print(f"[✓] Đã tải xong video MP4!")
-    return ensure_ios_compatibility(output_filename)
+    return ensure_ios_compatibility(output_filename, is_tiktok=True)
 
 def extract_info(url: str):
     """
@@ -227,8 +231,8 @@ def extract_info(url: str):
 def download_video(url: str, output_dir: str = None) -> str:
     """
     Tải video từ YouTube, Facebook Reel, TikTok.
-    - Với TikTok: Ưu tiên tải qua API trực tiếp để lấy MP4 nét nhất không logo, tránh bot blocking.
-    - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng + chuẩn hóa iOS/TikTok.
+    - Với TikTok: Tải qua API trực tiếp cực nhanh không logo.
+    - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng + tối ưu iOS.
     """
     if output_dir is None:
         output_dir = os.path.expanduser("~/Downloads")
@@ -237,16 +241,14 @@ def download_video(url: str, output_dir: str = None) -> str:
     # 1. ĐỐI VỚI TIKTOK: Ưu tiên kênh tải trực tiếp
     if is_tiktok_url(url):
         try:
-            print("[*] Đang xử lý link TikTok qua kênh tải tốc độ cao...")
             return download_tiktok_fallback(url, output_dir)
         except Exception as e:
-            print(f"[!] Kênh tải trực tiếp thông báo: {e}. Đang chuyển sang kênh dự phòng yt-dlp...")
+            print(f"[!] Kênh tải trực tiếp: {e}. Đang chuyển sang kênh dự phòng yt-dlp...")
 
     # 2. ĐỐI VỚI YOUTUBE / FACEBOOK / DỰ PHÒNG: Dùng yt-dlp
     ydl = get_yt_dlp()
     outtmpl = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
-    # Ưu tiên AVC1 (H.264) + AAC (chuẩn vàng cho iOS và TikTok)
     ydl_opts = {
         'outtmpl': outtmpl,
         'format': 'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[vcodec^=avc]+ba[acodec^=mp4a]/bv*[vcodec!=none]+ba[acodec!=none]/b[vcodec!=none]/bestvideo+bestaudio/best',
@@ -277,8 +279,7 @@ def download_video(url: str, output_dir: str = None) -> str:
                 files.sort(key=os.path.getmtime, reverse=True)
                 final_path = files[0] if files else filename
 
-            # Chuẩn hóa để 100% tương thích iOS Photos & TikTok
-            return ensure_ios_compatibility(final_path)
+            return ensure_ios_compatibility(final_path, is_tiktok=is_tiktok_url(url))
 
     except Exception as e:
         error_msg = str(e)
