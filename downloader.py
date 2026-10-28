@@ -1,0 +1,218 @@
+import os
+import sys
+import glob
+import json
+import re
+import ssl
+import shutil
+import urllib.request
+import urllib.parse
+
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
+
+# Bỏ qua lỗi SSL xác thực chứng chỉ thường gặp trên macOS
+SSL_CONTEXT = ssl._create_unverified_context()
+
+def get_yt_dlp():
+    if yt_dlp is None:
+        raise RuntimeError("Thư viện 'yt-dlp' chưa được cài đặt. Vui lòng chạy: pip install yt-dlp")
+    return yt_dlp
+
+def is_tiktok_url(url: str) -> bool:
+    return "tiktok.com" in url.lower()
+
+def extract_tiktok_fallback(url: str):
+    """
+    Lấy thông tin TikTok qua API trực tiếp.
+    Hỗ trợ nhận diện Video hoặc Album ảnh.
+    """
+    clean_url = url.split('?')[0] if '?' in url else url
+    api_url = f"https://www.tikwm.com/api/?url={urllib.parse.quote(clean_url)}&hd=1"
+    req = urllib.request.Request(api_url, headers={
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    with urllib.request.urlopen(req, timeout=15, context=SSL_CONTEXT) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+        
+    if data.get('code') == 0:
+        video_info = data.get('data', {})
+        images = video_info.get('images')
+        is_images = bool(images and len(images) > 0)
+        return {
+            'title': video_info.get('title', 'TikTok Post'),
+            'thumbnail': video_info.get('cover', ''),
+            'duration': video_info.get('duration', 0),
+            'uploader': video_info.get('author', {}).get('nickname', 'TikTok Creator'),
+            'extractor': 'TikTok (Album ảnh)' if is_images else 'TikTok',
+            'is_photo_mode': is_images,
+            'images': images or [],
+            'music': video_info.get('music'),
+            '_direct_url': video_info.get('hdplay') or video_info.get('play'),
+            '_id': video_info.get('id', 'video')
+        }
+    raise RuntimeError(data.get('msg', 'Không trích xuất được dữ liệu TikTok'))
+
+def download_tiktok_fallback(url: str, output_dir: str = None) -> str:
+    """
+    Tải nội dung TikTok trực tiếp không logo/watermark:
+    - Nếu là Video: Tải file MP4 sắc nét.
+    - Nếu là Album ảnh: Tải trọn bộ ảnh HD + Nhạc nền, nén ZIP.
+    """
+    if output_dir is None:
+        output_dir = os.path.expanduser("~/Downloads")
+    os.makedirs(output_dir, exist_ok=True)
+    info = extract_tiktok_fallback(url)
+    title = info.get('title', 'tiktok')
+    safe_title = re.sub(r'[\\/*?:"<>|]', "", title).strip()[:70]
+    if not safe_title:
+        safe_title = "tiktok_post"
+    video_id = info.get('_id', 'video')
+
+    # TRƯỜNG HỢP 1: BÀI ĐĂNG LÀ ALBUM ẢNH (SLIDESHOW)
+    if info.get('is_photo_mode') and info.get('images'):
+        images = info['images']
+        album_dir_name = f"{safe_title} [{video_id}]_AlbumAnh"
+        album_dir = os.path.join(output_dir, album_dir_name)
+        os.makedirs(album_dir, exist_ok=True)
+        
+        print(f"\n[*] Bài đăng gồm {len(images)} ảnh.")
+        print(f"[*] Đang tải trọn bộ ảnh HD và nhạc nền vào: {album_dir}...")
+
+        for i, img_url in enumerate(images, start=1):
+            img_file = os.path.join(album_dir, f"anh_{i:02d}.jpeg")
+            try:
+                req = urllib.request.Request(img_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r, open(img_file, 'wb') as f:
+                    f.write(r.read())
+            except Exception as e:
+                print(f"[!] Lỗi tải ảnh {i}: {e}")
+
+        if info.get('music'):
+            music_file = os.path.join(album_dir, "nhac_nen.mp3")
+            try:
+                req = urllib.request.Request(info['music'], headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r, open(music_file, 'wb') as f:
+                    f.write(r.read())
+            except Exception:
+                pass
+
+        zip_path_base = os.path.join(output_dir, album_dir_name)
+        shutil.make_archive(zip_path_base, 'zip', album_dir)
+        final_zip = f"{zip_path_base}.zip"
+
+        print(f"[✓] Đã lưu xong album ảnh tại: {final_zip}")
+        return final_zip
+
+    # TRƯỜNG HỢP 2: VIDEO CLIP THÔNG THƯỜNG (MP4 KHÔNG LOGO)
+    direct_url = info.get('_direct_url')
+    if not direct_url:
+        raise RuntimeError("Không tìm thấy đường dẫn video trực tiếp từ máy chủ")
+        
+    output_filename = os.path.join(output_dir, f"{safe_title} [{video_id}].mp4")
+    print(f"[*] Đang tải video MP4 chất lượng cao (không dính watermark)...")
+    
+    req = urllib.request.Request(direct_url, headers={
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    
+    with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as resp, open(output_filename, 'wb') as f:
+        while chunk := resp.read(65536):
+            f.write(chunk)
+            
+    print(f"[✓] Đã tải xong video MP4!")
+    return output_filename
+
+def extract_info(url: str):
+    """
+    Trích xuất tiêu đề, hình thumbnail, thời lượng và thông tin cơ bản.
+    """
+    if is_tiktok_url(url):
+        try:
+            return extract_tiktok_fallback(url)
+        except Exception:
+            pass
+
+    ydl = get_yt_dlp()
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+    }
+    with ydl.YoutubeDL(ydl_opts) as y:
+        info = y.extract_info(url, download=False)
+        return {
+            'title': info.get('title', 'Video không có tiêu đề'),
+            'thumbnail': info.get('thumbnail', ''),
+            'duration': info.get('duration', 0),
+            'uploader': info.get('uploader', 'Unknown'),
+            'extractor': info.get('extractor_key', 'Generic'),
+        }
+
+def download_video(url: str, output_dir: str = None) -> str:
+    """
+    Tải video từ YouTube, Facebook Reel, TikTok.
+    - Với TikTok: Ưu tiên tải qua API trực tiếp để lấy MP4 nét nhất không logo, tránh bot blocking.
+    - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng.
+    """
+    if output_dir is None:
+        output_dir = os.path.expanduser("~/Downloads")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 1. ĐỐI VỚI TIKTOK: Ưu tiên kênh tải trực tiếp
+    if is_tiktok_url(url):
+        try:
+            print("[*] Đang xử lý link TikTok qua kênh tải tốc độ cao...")
+            return download_tiktok_fallback(url, output_dir)
+        except Exception as e:
+            print(f"[!] Kênh tải trực tiếp thông báo: {e}. Đang chuyển sang kênh dự phòng yt-dlp...")
+
+    # 2. ĐỐI VỚI YOUTUBE / FACEBOOK / DỰ PHÒNG: Dùng yt-dlp
+    ydl = get_yt_dlp()
+    outtmpl = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
+
+    # Lọc nghiêm ngặt: Phải có codec video (vcodec!=none) để không bao giờ tải nhầm file audio-only
+    ydl_opts = {
+        'outtmpl': outtmpl,
+        'format': 'bv*[vcodec!=none]+ba[acodec!=none]/b[vcodec!=none]/bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
+        'quiet': False,
+        'no_warnings': True,
+    }
+
+    try:
+        with ydl.YoutubeDL(ydl_opts) as y:
+            info = y.extract_info(url, download=True)
+            filename = y.prepare_filename(info)
+            
+            base_name, _ = os.path.splitext(filename)
+            mp4_filename = f"{base_name}.mp4"
+            if os.path.exists(mp4_filename):
+                return mp4_filename
+            if os.path.exists(filename):
+                return filename
+
+            files = glob.glob(os.path.join(output_dir, '*'))
+            if files:
+                files.sort(key=os.path.getmtime, reverse=True)
+                return files[0]
+
+            return filename
+
+    except Exception as e:
+        error_msg = str(e)
+        # Nếu chưa thử fallback mà yt-dlp lỗi với TikTok thì thử fallback
+        if is_tiktok_url(url):
+            return download_tiktok_fallback(url, output_dir)
+        raise e
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Cách dùng: python downloader.py <link_video>")
+        sys.exit(1)
+    url = sys.argv[1]
+    print(f"Đang phân tích và tải: {url}...")
+    saved_file = download_video(url)
+    print(f"Đã lưu thành công tại: {saved_file}")

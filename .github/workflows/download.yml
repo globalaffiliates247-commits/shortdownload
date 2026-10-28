@@ -1,0 +1,46 @@
+name: Cloud Video Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'Dán link video (YouTube / Facebook Reel / TikTok)'
+        required: true
+        type: string
+
+jobs:
+  download-and-upload:
+    name: Tải Video trên Cloud
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kiểm tra mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài đặt môi trường Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cài đặt FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Cài đặt thư viện Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Thực hiện tải Video
+        run: |
+          mkdir -p ./downloads
+          python cli.py "${{ inputs.video_url }}" ./downloads
+
+      - name: Lưu trữ Video thành phẩm (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-thanh-pham
+          path: ./downloads/*
+          retention-days: 7

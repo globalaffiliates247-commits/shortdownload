@@ -1,0 +1,2 @@
+yt-dlp
+curl_cffi

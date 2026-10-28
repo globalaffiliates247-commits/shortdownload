@@ -1,0 +1,11 @@
+downloads/
+*.mp4
+*.mp3
+*.m4a
+*.zip
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+env/
