@@ -1,7 +1,25 @@
 import os
 import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 import downloader
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Máy chủ mini để các nền tảng Cloud (Render, Hugging Face) kiểm tra trạng thái sống của Bot"""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Telegram Video Downloader Bot is running online 24/7!")
+
+    def log_message(self, format, *args):
+        pass
+
+def start_health_check_server():
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
 
 # Lấy token từ biến môi trường, file .env hoặc tham số dòng lệnh
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -109,8 +127,12 @@ def handle_message(message):
                 pass
 
 if __name__ == '__main__':
+    # Khởi động cổng kiểm tra trạng thái máy chủ (cần thiết cho Render Web Service)
+    threading.Thread(target=start_health_check_server, daemon=True).start()
+    port = os.getenv("PORT", "8080")
     print("=" * 60)
     print(" 🤖 TELEGRAM BOT ĐANG CHẠY...")
+    print(f" 🌐 Cổng Cloud Web Health-Check đang mở tại PORT: {port}")
     print(" Gửi link vào Telegram bot của bạn để tải video!")
     print("=" * 60)
     bot.infinity_polling()
