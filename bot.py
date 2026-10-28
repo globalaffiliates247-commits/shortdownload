@@ -3,8 +3,19 @@ import sys
 import telebot
 import downloader
 
-# Lấy token từ biến môi trường hoặc nhập trực tiếp khi chạy
+# Lấy token từ biến môi trường, file .env hoặc tham số dòng lệnh
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+if not BOT_TOKEN and os.path.exists(".env"):
+    with open(".env") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("TELEGRAM_BOT_TOKEN="):
+                BOT_TOKEN = line.split("=", 1)[1].strip("'\" ")
+                break
+
+if not BOT_TOKEN and len(sys.argv) > 1:
+    BOT_TOKEN = sys.argv[1].strip()
 
 if not BOT_TOKEN:
     print("=" * 60)
@@ -12,10 +23,7 @@ if not BOT_TOKEN:
     print(" Bạn có thể chạy bot bằng lệnh:")
     print(" TELEGRAM_BOT_TOKEN='YOUR_BOT_TOKEN' python3 bot.py")
     print("=" * 60)
-    if len(sys.argv) > 1:
-        BOT_TOKEN = sys.argv[1].strip()
-    else:
-        sys.exit(1)
+    sys.exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
