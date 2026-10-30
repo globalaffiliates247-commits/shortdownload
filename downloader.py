@@ -27,10 +27,12 @@ def is_tiktok_url(url: str) -> bool:
 
 def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """
-    Chuẩn hóa video tương thích iOS siêu tốc, tối ưu hóa triệt để cho máy chủ Cloud (0.1 CPU):
+    Chuẩn hóa video tương thích iOS siêu tốc (an toàn tuyệt đối cho 512MB RAM):
     - Video TikTok: Giữ nguyên 100% (đã chuẩn H.264 + AAC từ CDN), không tốn 1ms CPU.
-    - Video khác (FB/YouTube): Chỉ chuyển đổi âm thanh sang AAC nếu là Opus (rất nhẹ, <0.2s).
-    - Chỉ re-encode video nếu bắt buộc là VP9/AV1 với preset ultrafast để tránh treo CPU.
+    - Video khác (FB/YouTube):
+      + Luôn sao chép luồng hình ảnh (-c:v copy). TUYỆT ĐỐI KHÔNG RE-ENCODE (-c:v libx264) để tránh OOM 512MB RAM!
+      + Chỉ chuyển đổi âm thanh sang AAC nếu là Opus/Vorbis (chỉ tốn ~10MB RAM, 0.2s).
+      + Gắn cờ +faststart cho iOS.
     """
     if not filepath or not filepath.endswith(".mp4") or not os.path.exists(filepath):
         return filepath
@@ -48,18 +50,10 @@ def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     base_name = os.path.basename(filepath)
     temp_ios_file = os.path.join(dir_name, f"ios_compat_{base_name}")
 
-    v_codec = "h264"
     a_codec = "aac"
 
     if ffprobe_bin:
         try:
-            res_v = subprocess.run(
-                [ffprobe_bin, "-v", "error", "-select_streams", "v:0",
-                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5
-            )
-            v_codec = res_v.stdout.strip().lower()
-
             res_a = subprocess.run(
                 [ffprobe_bin, "-v", "error", "-select_streams", "a:0",
                  "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
@@ -69,35 +63,24 @@ def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
         except Exception:
             pass
 
-    # Chỉ re-encode nếu video là VP9 hoặc AV1 (iOS không hỗ trợ)
-    if v_codec in ["vp9", "av01", "av1"]:
-        v_args = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast"]
-    else:
-        v_args = ["-c:v", "copy"]
-
-    # Nếu audio là Opus/Vorbis (FB Reels), chuyển sang AAC (siêu nhẹ, <0.2s)
-    if a_codec not in ["aac", "mp4a"]:
-        a_args = ["-c:a", "aac", "-b:a", "128k"]
-    else:
-        a_args = ["-c:a", "copy"]
-
-    # Nếu cả 2 đều đã chuẩn thì không cần chạy ffmpeg
-    if v_args == ["-c:v", "copy"] and a_args == ["-c:a", "copy"]:
+    # Nếu audio đã là aac hoặc mp4a thì file mp4 đã chuẩn 100%, không cần chạy ffmpeg
+    if a_codec in ["aac", "mp4a"]:
         return filepath
 
+    # Chỉ chuyển đổi âm thanh sang AAC, hình ảnh sao chép nguyên bản (-c:v copy)
     cmd = [
         ffmpeg_bin, "-y", "-i", filepath,
-        *v_args,
-        *a_args,
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",
         temp_ios_file
     ]
 
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
         if proc.returncode == 0 and os.path.exists(temp_ios_file) and os.path.getsize(temp_ios_file) > 1000:
             os.replace(temp_ios_file, filepath)
-            print("[✓] Đã chuẩn hóa video tương thích iOS siêu tốc.")
+            print("[✓] Đã chuẩn hóa âm thanh AAC tương thích iOS an toàn RAM.")
     except Exception as e:
         print(f"[!] Bỏ qua bước chuẩn hóa iOS do: {e}")
         if os.path.exists(temp_ios_file):
@@ -232,7 +215,7 @@ def download_video(url: str, output_dir: str = None) -> str:
     """
     Tải video từ YouTube, Facebook Reel, TikTok.
     - Với TikTok: Tải qua API trực tiếp cực nhanh không logo.
-    - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng + tối ưu iOS.
+    - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng, ưu tiên H.264 + AAC tự nhiên.
     """
     if output_dir is None:
         output_dir = os.path.expanduser("~/Downloads")
@@ -249,9 +232,21 @@ def download_video(url: str, output_dir: str = None) -> str:
     ydl = get_yt_dlp()
     outtmpl = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
+    # Ưu tiên tuyệt đối H.264 (AVC) và AAC để tránh tải VP9/AV1 gây tràn RAM 512MB
     ydl_opts = {
         'outtmpl': outtmpl,
-        'format': 'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[vcodec^=avc]+ba[acodec^=mp4a]/bv*[vcodec!=none]+ba[acodec!=none]/b[vcodec!=none]/bestvideo+bestaudio/best',
+        'format': (
+            'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/'
+            'bv*[vcodec^=avc]+ba[acodec^=mp4a]/'
+            'bv*[vcodec^=avc1]+ba/'
+            'bv*[vcodec^=avc]+ba/'
+            'bv*[vcodec!*=vp9][vcodec!*=vp09][vcodec!*=av01]+ba/'
+            'b[vcodec^=avc1]/'
+            'b[vcodec^=avc]/'
+            'b[vcodec!*=vp9][vcodec!*=av01]/'
+            'bestvideo[vcodec^=avc]+bestaudio/best'
+        ),
+        'format_sort': ['vcodec:h264', 'acodec:m4a'],
         'merge_output_format': 'mp4',
         'quiet': False,
         'no_warnings': True,

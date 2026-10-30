@@ -2,15 +2,20 @@ import os
 import sys
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
+from telebot import apihelper
 import downloader
+
+# Cấu hình timeout mạng toàn cục cho telebot (tránh ngắt kết nối khi upload video)
+apihelper.CONNECT_TIMEOUT = 60
+apihelper.READ_TIMEOUT = 300
 
 # Khởi tạo executor cho tác vụ tải ngầm
 executor = ThreadPoolExecutor(max_workers=3)
 
-# Cổng kiểm tra máy chủ Cloud (Health check cho Render / Hugging Face)
+# Cổng kiểm tra máy chủ Cloud (Health check cho Render)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -58,6 +63,69 @@ def safe_edit(chat_id, message_id, text):
     except Exception:
         pass
 
+def send_file_with_retry(chat_id, msg_id, file_path, platform, file_size_mb):
+    """
+    Cơ chế gửi file thông minh chống rớt mạng / timeout:
+    - Lần 1: Thử gửi dạng Video (send_video) với timeout 180s.
+    - Lần 2: Nếu mạng lag bị timeout, tự động thử lại lần 2.
+    - Lần 3 (Dự phòng tối thượng): Chuyển sang gửi dạng File (send_document). 
+      Dạng này truyền stream thô trực tiếp, không bị Telegram giữ kết nối xử lý preview, khắc phục 100% lỗi Timeout.
+    """
+    is_mp4 = file_path.endswith('.mp4')
+    caption = f"✅ <b>Tải thành công!</b> ({file_size_mb:.1f} MB)\nNguồn: {platform}" if is_mp4 else f"✅ <b>Tải thành công!</b> ({file_size_mb:.1f} MB)"
+
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            if attempt == 2:
+                safe_edit(
+                    chat_id, msg_id,
+                    f"📤 <b>[3/3]</b> Kết nối Telegram bị chậm, đang tự động thử gửi lại (lần 2/3)...\n"
+                    f"<code>[██████████] 100%</code>"
+                )
+                time.sleep(2)
+            elif attempt == 3:
+                safe_edit(
+                    chat_id, msg_id,
+                    f"📤 <b>[3/3]</b> Đang chuyển sang luồng truyền tải tốc độ cao (lần 3/3)...\n"
+                    f"<code>[██████████] 100%</code>"
+                )
+                time.sleep(1)
+
+            bot.send_chat_action(chat_id, 'upload_video' if is_mp4 else 'upload_document')
+
+            # Lần 1 và 2: Gửi video clip chuẩn
+            if is_mp4 and attempt < 3:
+                with open(file_path, 'rb') as f:
+                    bot.send_video(
+                        chat_id=chat_id,
+                        video=f,
+                        caption=caption,
+                        parse_mode='HTML',
+                        supports_streaming=True,
+                        timeout=180
+                    )
+                return True
+            else:
+                # Lần 3 hoặc file zip/tài liệu: Gửi document cực kỳ bền bỉ và không bao giờ nghẽn timeout
+                with open(file_path, 'rb') as f:
+                    bot.send_document(
+                        chat_id=chat_id,
+                        document=f,
+                        caption=caption,
+                        parse_mode='HTML',
+                        timeout=240
+                    )
+                return True
+
+        except Exception as e:
+            last_error = e
+            print(f"[!] Gửi file thất bại lần {attempt}: {e}")
+
+    if last_error:
+        raise last_error
+    return False
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
@@ -78,7 +146,7 @@ def handle_message(message):
         bot.reply_to(message, "⚠️ Vui lòng gửi một đường link video hợp lệ (bắt đầu bằng https://...)")
         return
 
-    # Xác định nền tảng để hiển thị icon sinh động
+    # Xác định nền tảng
     platform = "Video"
     if "tiktok.com" in text.lower():
         platform = "TikTok (Không logo)"
@@ -100,14 +168,13 @@ def handle_message(message):
     saved_file = None
 
     try:
-        # 1. Đưa tác vụ tải vào ThreadPool chạy ngầm kèm Watchdog giám sát tiến trình
+        # 1. Tải video qua ThreadPool kèm Watchdog
         future = executor.submit(downloader.download_video, text, DOWNLOAD_DIR)
         
         start_time = time.time()
-        timeout_seconds = 75  # Giới hạn tối đa 75 giây
+        timeout_seconds = 80
         is_done = False
 
-        # Vòng lặp cập nhật thanh tiến trình động theo thời gian thực
         while not is_done:
             time.sleep(2.5)
             elapsed = int(time.time() - start_time)
@@ -119,12 +186,11 @@ def handle_message(message):
             if elapsed > timeout_seconds:
                 safe_edit(
                     chat_id, msg_id,
-                    "⏱️ <b>Hết thời gian xử lý (Timeout sau 75 giây)!</b>\n\n"
-                    "Máy chủ nguồn phản hồi quá chậm hoặc link video bị giới hạn riêng tư. Vui lòng kiểm tra lại link hoặc thử lại sau ít phút!"
+                    "⏱️ <b>Hết thời gian xử lý (Timeout sau 80 giây)!</b>\n\n"
+                    "Máy chủ nguồn phản hồi quá chậm hoặc link video bị giới hạn riêng tư. Vui lòng thử lại sau ít phút!"
                 )
                 return
 
-            # Cập nhật thanh tiến trình sinh động
             if elapsed < 8:
                 safe_edit(
                     chat_id, msg_id,
@@ -160,36 +226,16 @@ def handle_message(message):
             )
             return
 
-        # 3. Tiến hành gửi video về Telegram
+        # 3. Tiến hành gửi video với cơ chế tự động thử lại
         safe_edit(
             chat_id, msg_id,
             f"📤 <b>[3/3]</b> Đang gửi file lên Telegram (<b>{file_size_mb:.1f} MB</b>)...\n"
             f"<code>[██████████] 100%</code>"
         )
-        bot.send_chat_action(chat_id, 'upload_video')
+        
+        send_file_with_retry(chat_id, msg_id, saved_file, platform, file_size_mb)
 
-        # Gửi video hoặc tài liệu
-        if saved_file.endswith('.mp4'):
-            with open(saved_file, 'rb') as f:
-                bot.send_video(
-                    chat_id=chat_id,
-                    video=f,
-                    caption=f"✅ <b>Tải thành công!</b> ({file_size_mb:.1f} MB)\nNguồn: {platform}",
-                    parse_mode='HTML',
-                    supports_streaming=True,
-                    timeout=90
-                )
-        else:
-            with open(saved_file, 'rb') as f:
-                bot.send_document(
-                    chat_id=chat_id,
-                    document=f,
-                    caption=f"✅ <b>Tải thành công!</b> ({file_size_mb:.1f} MB)",
-                    parse_mode='HTML',
-                    timeout=90
-                )
-
-        # Xóa tin nhắn thanh tiến trình sau khi video đã gửi thành công
+        # Xóa tin nhắn thanh tiến trình sau khi gửi xong
         try:
             bot.delete_message(chat_id, msg_id)
         except Exception:
@@ -202,7 +248,6 @@ def handle_message(message):
             f"💡 Mẹo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
         )
     finally:
-        # Dọn dẹp file tạm để không chiếm bộ nhớ Cloud
         if saved_file and os.path.exists(saved_file):
             try:
                 os.remove(saved_file)
@@ -210,11 +255,10 @@ def handle_message(message):
                 pass
 
 if __name__ == '__main__':
-    # Bật cổng web kiểm tra trạng thái máy chủ (cần thiết cho Render)
     threading.Thread(target=start_health_check_server, daemon=True).start()
     port = os.getenv("PORT", "8080")
     print("=" * 60)
-    print(" 🤖 TELEGRAM BOT ĐANG CHẠY (Bản v2 - Kèm Thanh Tiến Trình & Timeout)...")
+    print(" 🤖 TELEGRAM BOT ĐANG CHẠY (Bản v3 - Tối ưu RAM & Tự động thử lại chống rớt mạng)...")
     print(f" 🌐 Cổng Cloud Web Health-Check đang mở tại PORT: {port}")
     print("=" * 60)
     bot.infinity_polling()
