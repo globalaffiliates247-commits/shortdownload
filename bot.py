@@ -33,6 +33,7 @@ WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
 ZALO_GROUP_URL = os.getenv("ZALO_GROUP_URL", "https://zalo.me/g/hhmdni386")
 TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_community_channel")
+CUSTOM_DOMAIN = os.getenv("CUSTOM_DOMAIN", "shotdownload.taio.club")
 
 # ==========================================
 # HÀNG ĐỢI TUẦN TỰ (FIFO) & BẢO VỆ CHỐNG SPAM/DDOS
@@ -881,7 +882,7 @@ def show_vip_locked_message(message):
         f"2️⃣ Tham gia <b>Nhóm Zalo hỗ trợ</b> để được duyệt nhanh nhất:\n"
         f"👉 <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>\n\n"
         f"🌐 <i>Bạn cũng có thể trải nghiệm phiên bản Web miễn phí tại:</i>\n"
-        f"https://shortdownload-pybt.onrender.com",
+        f"https://{CUSTOM_DOMAIN}",
         parse_mode="HTML",
         reply_markup=markup,
         disable_web_page_preview=True
