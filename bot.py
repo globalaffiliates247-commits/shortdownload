@@ -35,6 +35,80 @@ ZALO_GROUP_URL = os.getenv("ZALO_GROUP_URL", "https://zalo.me/g/hhmdni386")
 TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_community_channel")
 
 # ==========================================
+# HÀNG ĐỢI TUẦN TỰ (FIFO) & BẢO VỆ CHỐNG SPAM/DDOS
+# ==========================================
+class DownloadQueueManager:
+    """Hệ thống hàng đợi tuần tự (FIFO) và Chống Spam/DDoS toàn diện cho máy chủ"""
+    def __init__(self, max_queue_size=10):
+        self.lock = threading.Lock()
+        self.waiting = []
+        self.active_users = set()
+        self.max_queue_size = max_queue_size
+        self.last_user_request = {} # user_key -> timestamp (cooldown)
+
+    def request_slot(self, user_key, on_wait=None, timeout_seconds=120):
+        """Yêu cầu vị trí tải tuần tự, đảm bảo tại 1 thời điểm chỉ có 1 video được tải/xử lý"""
+        now = time.time()
+        with self.lock:
+            # 1. Kiểm tra Cooldown (chống spam liên tục trong 3 giây)
+            last_time = self.last_user_request.get(user_key, 0)
+            if now - last_time < 3:
+                return False, "COOLDOWN", None
+
+            # 2. Kiểm tra nếu user này đang có 1 video đang chạy hoặc đang trong hàng đợi
+            if user_key in self.active_users:
+                return False, "ALREADY_ACTIVE", None
+
+            # 3. Kiểm tra nếu hàng đợi quá tải
+            if len(self.waiting) >= self.max_queue_size:
+                return False, "QUEUE_FULL", None
+
+            self.last_user_request[user_key] = now
+            self.active_users.add(user_key)
+            ticket = {"id": user_key, "time": now}
+            self.waiting.append(ticket)
+
+        # Chờ đến lượt ở đầu hàng đợi (index 0)
+        start_wait = time.time()
+        last_notified_pos = -1
+
+        while True:
+            with self.lock:
+                if ticket not in self.waiting:
+                    return False, "CANCELLED", None
+                idx = self.waiting.index(ticket)
+                if idx == 0:
+                    # Đã đến lượt xử lý
+                    return True, "READY", ticket
+                pos = idx
+
+            # Nếu đang chờ, cập nhật thông báo cho user
+            if pos != last_notified_pos:
+                last_notified_pos = pos
+                if on_wait:
+                    try:
+                        on_wait(pos)
+                    except Exception:
+                        pass
+
+            if time.time() - start_wait > timeout_seconds:
+                self.release_slot(ticket)
+                return False, "TIMEOUT", None
+
+            time.sleep(1.5)
+
+    def release_slot(self, ticket):
+        """Giải phóng vị trí sau khi tải xong để nhường lượt cho người tiếp theo"""
+        if not ticket:
+            return
+        with self.lock:
+            if ticket in self.waiting:
+                self.waiting.remove(ticket)
+            self.active_users.discard(ticket.get("id"))
+
+download_queue = DownloadQueueManager(max_queue_size=10)
+
+# ==========================================
 # QUẢN LÝ DỮ LIỆU & PHÂN QUYỀN VIP
 # ==========================================
 def load_whitelist():
@@ -649,13 +723,34 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
         elif parsed.path == "/api/download":
+            client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+            user_key = f"web_{client_ip}"
+
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
+            ticket = None
             try:
                 data = json.loads(body.decode('utf-8'))
                 url = data.get("url")
                 if not url:
                     raise ValueError("URL không được để trống")
+
+                # Đăng ký slot trong hàng đợi tuần tự chung của máy chủ
+                ok, reason, ticket = download_queue.request_slot(user_key, timeout_seconds=90)
+                if not ok:
+                    if reason == "ALREADY_ACTIVE":
+                        err_msg = "Bạn đang có 1 video khác đang trong tiến trình xử lý. Vui lòng chờ hoàn tất!"
+                    elif reason == "COOLDOWN":
+                        err_msg = "Thao tác quá nhanh. Vui lòng đợi vài giây trước khi gửi link tiếp theo!"
+                    elif reason == "QUEUE_FULL":
+                        err_msg = "Máy chủ đang có nhiều người dùng cùng lúc (hàng đợi đầy). Vui lòng thử lại sau 1-2 phút!"
+                    else:
+                        err_msg = "Hết thời gian chờ trong hàng đợi. Vui lòng thử lại!"
+                    self.send_response(429)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": err_msg}).encode('utf-8'))
+                    return
 
                 meta = {}
                 try:
@@ -686,6 +781,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+            finally:
+                if ticket:
+                    download_queue.release_slot(ticket)
         else:
             self.send_response(404)
             self.end_headers()
@@ -1005,18 +1103,60 @@ def handle_message(message):
     elif "youtube.com" in text.lower() or "youtu.be" in text.lower():
         platform = "YouTube"
 
+    user_key = f"tg_{user_id}"
+
     status_msg = bot.reply_to(
         message, 
-        f"⏳ <b>[1/3]</b> Đang kết nối máy chủ <b>{platform}</b>...\n"
-        f"<code>[██░░░░░░░░] 20%</code>", 
+        f"⏳ <b>[Hàng đợi]</b> Đang kiểm tra trạng thái máy chủ...\n"
+        f"<code>[██░░░░░░░░] 10%</code>", 
         parse_mode='HTML'
     )
     
     chat_id = message.chat.id
     msg_id = status_msg.message_id
-    saved_file = None
 
+    # Hàm cập nhật vị trí hàng đợi trực quan cho user
+    def on_queue_wait(pos):
+        safe_edit(
+            chat_id, msg_id,
+            f"⏳ <b>[HÀNG ĐỢI TUẦN TỰ]</b> Máy chủ đang tải video phía trước!\n"
+            f"• Vị trí của bạn: <b>#{pos}</b> trong hàng đợi.\n"
+            f"• Video của bạn sẽ tự động xử lý ngay khi lượt trước hoàn tất.\n"
+            f"<i>(Hệ thống xử lý tuần tự từng video để đảm bảo tốc độ cao nhất và chống nghẽn RAM)</i>"
+        )
+
+    # Đăng ký slot trong hàng đợi tuần tự chung của máy chủ
+    ok, reason, ticket = download_queue.request_slot(user_key, on_wait=on_queue_wait, timeout_seconds=120)
+
+    if not ok:
+        if reason == "ALREADY_ACTIVE":
+            safe_edit(
+                chat_id, msg_id,
+                "⚠️ <b>Bạn đang có 1 video đang trong tiến trình xử lý!</b>\n\n"
+                "Vui lòng đợi video đó hoàn tất trước khi gửi đường link tiếp theo để tránh làm quá tải máy chủ."
+            )
+        elif reason == "COOLDOWN":
+            safe_edit(
+                chat_id, msg_id,
+                "⏱️ <b>Thao tác quá nhanh!</b> Vui lòng chờ vài giây trước khi gửi link tiếp theo."
+            )
+        elif reason == "QUEUE_FULL":
+            safe_edit(
+                chat_id, msg_id,
+                "⚠️ <b>Hàng đợi máy chủ hiện đang đầy (tối đa 10 tác vụ)!</b>\n\nVui lòng thử lại sau 1-2 phút nhé."
+            )
+        else:
+            safe_edit(chat_id, msg_id, "⏱️ Hết thời gian chờ trong hàng đợi. Vui lòng gửi lại link sau!")
+        return
+
+    saved_file = None
     try:
+        safe_edit(
+            chat_id, msg_id,
+            f"⏳ <b>[1/3]</b> Đã đến lượt bạn! Đang kết nối máy chủ <b>{platform}</b>...\n"
+            f"<code>[██░░░░░░░░] 20%</code>"
+        )
+
         future = executor.submit(downloader.download_video, text, DOWNLOAD_DIR)
         start_time = time.time()
         timeout_seconds = 80
@@ -1091,6 +1231,8 @@ def handle_message(message):
             f"💡 Mẹo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
         )
     finally:
+        # Giải phóng slot trong hàng đợi cho người kế tiếp
+        download_queue.release_slot(ticket)
         if saved_file and os.path.exists(saved_file):
             try:
                 os.remove(saved_file)
