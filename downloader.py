@@ -185,6 +185,40 @@ def download_tiktok_fallback(url: str, output_dir: str = None) -> str:
             
     return ensure_ios_compatibility(output_filename, is_tiktok=True)
 
+def get_base_ydl_opts():
+    """Tạo cấu hình yt-dlp tối ưu vượt qua tường lửa kiểm tra bot của YouTube trên Cloud"""
+    js_runtimes = {}
+    if shutil.which("node"):
+        js_runtimes['node'] = {}
+    elif shutil.which("deno"):
+        js_runtimes['deno'] = {}
+
+    opts = {
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['visionos', 'android_vr', 'tv', 'web_embedded']
+            }
+        }
+    }
+    if js_runtimes:
+        opts['js_runtimes'] = js_runtimes
+
+    # Hỗ trợ Cookies nếu người dùng cấu hình
+    cookie_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
+    if os.path.exists(cookie_file):
+        opts['cookiefile'] = cookie_file
+    elif os.getenv("YOUTUBE_COOKIES"):
+        temp_cookies = os.path.join(os.path.dirname(__file__), "temp_cookies.txt")
+        try:
+            with open(temp_cookies, "w", encoding="utf-8") as f:
+                f.write(os.getenv("YOUTUBE_COOKIES"))
+            opts['cookiefile'] = temp_cookies
+        except Exception:
+            pass
+
+    return opts
+
 def extract_info(url: str):
     """
     Trích xuất tiêu đề, hình thumbnail, thời lượng và thông tin cơ bản.
@@ -196,11 +230,11 @@ def extract_info(url: str):
             pass
 
     ydl = get_yt_dlp()
-    ydl_opts = {
+    ydl_opts = get_base_ydl_opts()
+    ydl_opts.update({
         'quiet': True,
-        'no_warnings': True,
         'skip_download': True,
-    }
+    })
     with ydl.YoutubeDL(ydl_opts) as y:
         info = y.extract_info(url, download=False)
         return {
@@ -233,7 +267,8 @@ def download_video(url: str, output_dir: str = None) -> str:
     outtmpl = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
     # Ưu tiên tuyệt đối H.264 (AVC) và AAC để tránh tải VP9/AV1 gây tràn RAM 512MB
-    ydl_opts = {
+    ydl_opts = get_base_ydl_opts()
+    ydl_opts.update({
         'outtmpl': outtmpl,
         'format': (
             'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/'
@@ -249,14 +284,13 @@ def download_video(url: str, output_dir: str = None) -> str:
         'format_sort': ['vcodec:h264', 'acodec:m4a'],
         'merge_output_format': 'mp4',
         'quiet': False,
-        'no_warnings': True,
         'postprocessor_args': {
             'merger': [
                 '-c:a', 'aac',
                 '-movflags', '+faststart'
             ]
         }
-    }
+    })
 
     try:
         with ydl.YoutubeDL(ydl_opts) as y:
