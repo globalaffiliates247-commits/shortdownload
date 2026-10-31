@@ -31,12 +31,41 @@ WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 ADMIN_IPS_FILE = os.path.join(DATA_DIR, "admin_ips.json")
 
+def load_admin_chat_id():
+    """Lấy Admin Chat ID từ Settings nếu có, hoặc từ Env / Mặc định"""
+    default_id = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "admin_chat_id" in data:
+                    return int(data["admin_chat_id"])
+    except Exception:
+        pass
+    return default_id
+
 # Thông tin cấu hình nghiệp vụ của Chủ sở hữu (Admin)
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
+ADMIN_CHAT_ID = load_admin_chat_id()
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "vip_admin_taio")
 ZALO_GROUP_URL = os.getenv("ZALO_GROUP_URL", "https://zalo.me/g/hhmdni386")
 TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_community_channel")
 CUSTOM_DOMAIN = os.getenv("CUSTOM_DOMAIN", "shotdownload.taio.club")
+
+def is_admin_user(user_id, chat_id=None):
+    """Kiểm tra xem user_id hoặc chat_id có phải là Admin không"""
+    current_admin = ADMIN_CHAT_ID
+    try:
+        if user_id and int(user_id) == current_admin:
+            return True
+        if chat_id and int(chat_id) == current_admin:
+            return True
+        wl = load_whitelist()
+        user_info = wl.get(str(user_id), {})
+        if user_info.get("role") == "admin":
+            return True
+    except Exception:
+        pass
+    return False
 
 # ==========================================
 # HÀNG ĐỢI TUẦN TỰ (FIFO) & BẢO VỆ CHỐNG SPAM/DDOS
@@ -1314,19 +1343,72 @@ def show_vip_locked_message(message):
     )
 
 # --- CÁC LỆNH DÀNH RIÊNG CHO ADMIN ---
-@bot.message_handler(commands=['myid'])
+@bot.message_handler(commands=['claimadmin', 'setadmin'])
+def handle_claim_admin(message):
+    global ADMIN_CHAT_ID
+    user_id = message.from_user.id
+    parts = (message.text or "").strip().split()
+    if len(parts) > 1 and parts[1].strip() == ADMIN_TOKEN:
+        ADMIN_CHAT_ID = user_id
+        try:
+            settings = {}
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    settings = json.load(f)
+            settings["admin_chat_id"] = ADMIN_CHAT_ID
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[!] Lỗi lưu settings: {e}")
+
+        wl = load_whitelist()
+        wl[str(user_id)] = {
+            "name": f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip(),
+            "role": "admin",
+            "activated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        save_whitelist(wl)
+
+        bot.reply_to(
+            message,
+            f"👑 <b>XÁC THỰC QUẢN TRỊ VIÊN THÀNH CÔNG!</b>\n\n"
+            f"• Telegram User ID của bạn: <code>{user_id}</code>\n"
+            f"• Quyền Admin đã được gán vĩnh viễn cho tài khoản này.\n\n"
+            f"👉 Bây giờ bạn có thể dùng mọi lệnh Admin như: /adminweb, /myips, /sync...",
+            parse_mode="HTML"
+        )
+    else:
+        bot.reply_to(
+            message,
+            f"⚠️ <b>Cú pháp xác thực Admin:</b>\n"
+            f"<code>/claimadmin {ADMIN_TOKEN}</code>\n\n"
+            f"• ID của bạn: <code>{user_id}</code>\n"
+            f"• Admin ID hiện tại: <code>{ADMIN_CHAT_ID}</code>",
+            parse_mode="HTML"
+        )
+
+@bot.message_handler(commands=['myid', 'id'])
 def handle_myid(message):
+    uid = message.from_user.id
+    cid = message.chat.id
+    is_adm = is_admin_user(uid, cid)
     bot.reply_to(
         message,
-        f"🆔 <b>Chat ID của bạn là:</b> <code>{message.chat.id}</code>\n"
-        f"👤 <b>Tên:</b> {message.from_user.first_name}\n"
-        f"🌐 <b>Username:</b> @{message.from_user.username or 'Không có'}",
+        f"🆔 <b>THÔNG TIN TÀI KHOẢN CỦA BẠN:</b>\n\n"
+        f"• <b>User ID:</b> <code>{uid}</code>\n"
+        f"• <b>Chat ID:</b> <code>{cid}</code>\n"
+        f"• <b>Tên:</b> {message.from_user.first_name}\n"
+        f"• <b>Username:</b> @{message.from_user.username or 'Không có'}\n"
+        f"• <b>Vai trò:</b> {'👑 Quản trị viên (Admin)' if is_adm else '👤 Thành viên'}\n"
+        f"• <b>Admin ID đang cấu hình:</b> <code>{ADMIN_CHAT_ID}</code>\n\n"
+        f"💡 <i>Nếu bạn là Admin và chưa được nhận diện, hãy gửi lệnh:</i>\n"
+        f"<code>/claimadmin {ADMIN_TOKEN}</code>",
         parse_mode="HTML"
     )
 
 @bot.message_handler(func=lambda msg: (msg.text or '').startswith('/duyet_'))
 def handle_duyet(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1363,7 +1445,7 @@ def handle_duyet(message):
 
 @bot.message_handler(func=lambda msg: (msg.text or '').startswith('/khoa_'))
 def handle_khoa(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1373,7 +1455,7 @@ def handle_khoa(message):
         return
 
     target_id = match.group(1)
-    if int(target_id) == ADMIN_CHAT_ID:
+    if is_admin_user(target_id):
         bot.reply_to(message, "⚠️ Không thể khóa chính Admin.")
         return
 
@@ -1387,7 +1469,7 @@ def handle_khoa(message):
 
 @bot.message_handler(commands=['danhsach'])
 def handle_danhsach(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1400,7 +1482,7 @@ def handle_danhsach(message):
 
 @bot.message_handler(commands=['leads'])
 def handle_leads(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1424,7 +1506,7 @@ def handle_leads(message):
 
 @bot.message_handler(commands=['sync'])
 def handle_sync_toggle(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1450,9 +1532,38 @@ def handle_sync_toggle(message):
 # --- CÁC LỆNH QUẢN LÝ IP & WEB VIP DÀNH CHO ADMIN ---
 @bot.message_handler(commands=['adminweb', 'vipurl'])
 def handle_adminweb(message):
-    if message.chat.id != ADMIN_CHAT_ID:
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+    global ADMIN_CHAT_ID
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    parts = (message.text or "").strip().split()
+    has_token = len(parts) > 1 and parts[1].strip() == ADMIN_TOKEN
+
+    if not is_admin_user(user_id, chat_id) and not has_token:
+        bot.reply_to(
+            message, 
+            f"⛔ <b>Lệnh này chỉ dành riêng cho Admin.</b>\n\n"
+            f"• ID Telegram của bạn: <code>{user_id}</code>\n"
+            f"• Admin ID cấu hình: <code>{ADMIN_CHAT_ID}</code>\n\n"
+            f"👉 <b>Cách kích hoạt quyền Admin ngay lập tức:</b>\n"
+            f"Bạn chỉ cần gửi lệnh sau:\n"
+            f"<code>/claimadmin {ADMIN_TOKEN}</code>",
+            parse_mode="HTML"
+        )
         return
+
+    # Nếu gửi kèm token hợp lệ, tự động gán quyền Admin luôn
+    if has_token and not is_admin_user(user_id, chat_id):
+        ADMIN_CHAT_ID = user_id
+        try:
+            settings = {}
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    settings = json.load(f)
+            settings["admin_chat_id"] = ADMIN_CHAT_ID
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
     magic_url = f"https://{CUSTOM_DOMAIN}/?token={ADMIN_TOKEN}"
     reply_text = (
@@ -1471,7 +1582,7 @@ def handle_adminweb(message):
 
 @bot.message_handler(commands=['myips'])
 def handle_myips(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1488,7 +1599,7 @@ def handle_myips(message):
 
 @bot.message_handler(commands=['addip'])
 def handle_addip(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1503,7 +1614,7 @@ def handle_addip(message):
 
 @bot.message_handler(commands=['delip'])
 def handle_delip(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1520,7 +1631,7 @@ def handle_delip(message):
 
 @bot.message_handler(commands=['myip'])
 def handle_myip_cmd(message):
-    if message.chat.id != ADMIN_CHAT_ID:
+    if not is_admin_user(message.from_user.id, message.chat.id):
         bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
         return
 
@@ -1531,7 +1642,7 @@ def handle_myip_cmd(message):
         parse_mode="HTML"
     )
 
-# --- XỬ LÝ KHÁCH HÀNG GỬI SỐ ĐIỆN THOẠI ĐĂNG KÝ ---
+# --- XỬ LÝ KHÁCH HÀNG GỬI SỐ ĐIỆN THOẠI ĐĂNG KÝ (TỰ ĐỘNG MỞ KHÓA TỨC THÌ) ---
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     if not message.contact:
@@ -1549,15 +1660,25 @@ def handle_contact(message):
         extra={"user_id": user_id, "username": username}
     )
 
+    # TỰ ĐỘNG KÍCH HOẠT QUYỀN TẢI VIDEO NGAY LẬP TỨC (KHÔNG CẦN CHỜ DUYỆT)
+    wl = load_whitelist()
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    wl[str(user_id)] = {
+        "name": name,
+        "phone": phone,
+        "activated_at": now_str,
+        "approved_by": "auto_contact_phone"
+    }
+    save_whitelist(wl)
+
     rm_markup = telebot.types.ReplyKeyboardRemove()
     bot.reply_to(
         message,
-        f"✅ <b>ĐÃ TIẾP NHẬN YÊU CẦU KÍCH HOẠT!</b>\n\n"
-        f"• Họ tên: <b>{name}</b>\n"
-        f"• Số điện thoại: <code>{phone}</code>\n"
-        f"• Telegram ID: <code>{user_id}</code>\n\n"
-        f"Admin đã nhận được thông tin và sẽ phê duyệt kích hoạt cho bạn trong giây lát.\n"
-        f"👉 Bạn hãy tham gia nhóm Zalo để được duyệt ngay: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+        f"🎉 <b>XÁC NHẬN THÀNH CÔNG - ĐÃ MỞ KHÓA TẢI VIDEO!</b>\n\n"
+        f"Cảm ơn bạn <b>{name}</b> (SĐT: <code>{phone}</code>).\n"
+        f"Hệ thống đã <b>tự động kích hoạt quyền tải video 24/7</b> cho tài khoản của bạn ngay lập tức!\n\n"
+        f"👉 <b>Bây giờ bạn có thể gửi bất kỳ đường link video nào (TikTok, Facebook Reels, YouTube) vào đây để tải ngay nhé!</b>\n\n"
+        f"💬 Nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
         parse_mode="HTML",
         reply_markup=rm_markup,
         disable_web_page_preview=True
@@ -1568,8 +1689,9 @@ def handle_contact(message):
 def send_welcome(message):
     user_id = message.from_user.id
     wl = load_whitelist()
+    is_admin = is_admin_user(user_id, message.chat.id)
 
-    if user_id == ADMIN_CHAT_ID or str(user_id) in wl:
+    if is_admin or str(user_id) in wl:
         welcome_text = (
             "👋 Chào bạn! Tôi là <b>Bot tải Video tự động</b>.\n\n"
             "✨ Hỗ trợ tải chất lượng cao không logo:\n"
@@ -1578,8 +1700,16 @@ def send_welcome(message):
             "• 🔴 YouTube / Shorts (Gói VIP Nâng cao)\n\n"
             "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
         )
-        if user_id == ADMIN_CHAT_ID:
-            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/adminweb : Link mở Web VIP 1 chạm (tự động nạp IP điện thoại)\n/myips : Xem danh sách IP Admin/VIP\n/addip : Thêm IP Admin thủ công\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP\n/sync : Bật/Tắt tự động nhận video"
+        if is_admin:
+            welcome_text += (
+                f"\n\n👑 <b>Menu Quản trị viên (Admin ID: {ADMIN_CHAT_ID}):</b>\n"
+                "/adminweb : Link mở Web VIP 1 chạm (tự động nạp IP điện thoại)\n"
+                "/myips : Xem danh sách IP Admin/VIP\n"
+                "/addip : Thêm IP Admin thủ công\n"
+                "/leads : Xem khách hàng mới\n"
+                "/danhsach : Xem danh sách VIP\n"
+                "/sync : Bật/Tắt tự động nhận video"
+            )
         bot.reply_to(message, welcome_text, parse_mode='HTML')
     else:
         show_vip_locked_message(message)
@@ -1589,14 +1719,15 @@ def handle_message(message):
     text = (message.text or "").strip()
     user_id = message.from_user.id
     wl = load_whitelist()
-    is_whitelisted = (user_id == ADMIN_CHAT_ID) or (str(user_id) in wl)
+    is_admin = is_admin_user(user_id, message.chat.id)
+    is_whitelisted = is_admin or (str(user_id) in wl)
 
     # Nút bấm menu phụ
     if text == "💬 Vào Nhóm Zalo Hỗ Trợ":
         bot.reply_to(message, f"👉 Tham gia nhóm Zalo hỗ trợ tại: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>", parse_mode="HTML")
         return
 
-    # Nếu người dùng nhập số điện thoại bằng tay để đăng ký
+    # Nếu người dùng nhập số điện thoại bằng tay để đăng ký (TỰ ĐỘNG KÍCH HOẠT LUÔN)
     clean_digits = re.sub(r'[^\d+]', '', text)
     if not is_whitelisted and ((clean_digits.startswith('0') and len(clean_digits) in (10, 11)) or (clean_digits.startswith('+84') and len(clean_digits) in (11, 12))):
         name = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
@@ -1608,12 +1739,25 @@ def handle_message(message):
             source="telegram_bot",
             extra={"user_id": user_id, "username": username}
         )
+
+        # TỰ ĐỘNG MỞ KHÓA TỨC THÌ
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        wl[str(user_id)] = {
+            "name": name,
+            "phone": clean_digits,
+            "activated_at": now_str,
+            "approved_by": "auto_manual_phone"
+        }
+        save_whitelist(wl)
+
         rm_markup = telebot.types.ReplyKeyboardRemove()
         bot.reply_to(
             message,
-            f"✅ <b>ĐÃ TIẾP NHẬN SỐ ĐIỆN THOẠI {clean_digits}!</b>\n\n"
-            f"Yêu cầu kích hoạt của bạn đã được gửi tới Admin. Vui lòng chờ phê duyệt trong giây lát.\n"
-            f"👉 Nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+            f"🎉 <b>XÁC NHẬN THÀNH CÔNG - ĐÃ MỞ KHÓA TẢI VIDEO!</b>\n\n"
+            f"Cảm ơn bạn <b>{name}</b> (SĐT: <code>{clean_digits}</code>).\n"
+            f"Hệ thống đã <b>tự động kích hoạt quyền tải video 24/7</b> cho tài khoản của bạn ngay lập tức!\n\n"
+            f"👉 <b>Bây giờ bạn có thể gửi bất kỳ đường link video nào (TikTok, Facebook Reels, YouTube) vào đây để tải ngay nhé!</b>\n\n"
+            f"💬 Nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
             parse_mode="HTML",
             reply_markup=rm_markup,
             disable_web_page_preview=True
