@@ -11,3 +11,4 @@ __pycache__/
 .venv/
 env/
 .env
+trigger_deploy.sh
