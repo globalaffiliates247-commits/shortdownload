@@ -186,8 +186,13 @@ HTML_PAGE = """<!DOCTYPE html>
           saveBtn.href = '/api/file/' + encodeURIComponent(data.filename);
           saveBtn.setAttribute('download', data.filename);
           
-          // Tự kích hoạt lưu nếu trên iPhone/Mac
-          window.location.href = saveBtn.href;
+          // Kích hoạt lưu ngầm trực tiếp không chuyển trang gây lỗi 502
+          const autoDownloadLink = document.createElement('a');
+          autoDownloadLink.href = saveBtn.href;
+          autoDownloadLink.setAttribute('download', data.filename);
+          document.body.appendChild(autoDownloadLink);
+          autoDownloadLink.click();
+          document.body.removeChild(autoDownloadLink);
         } else {
           statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
@@ -234,9 +239,15 @@ class WebAppHandler(BaseHTTPRequestHandler):
             if not content_type:
                 content_type = "video/mp4" if filepath.endswith('.mp4') else "application/octet-stream"
 
+            # Xử lý tên file an toàn cho HTTP Header (chuẩn ASCII fallback + RFC 5987 UTF-8)
+            # Tránh lỗi UnicodeEncodeError khi tên video tiếng Việt gây mã lỗi 502 Bad Gateway
+            raw_filename = os.path.basename(filepath)
+            safe_ascii = re.sub(r'[^\w\.\-\s]', '_', raw_filename).strip()
+            encoded_utf8 = urllib.parse.quote(raw_filename)
+
             self.send_response(200)
             self.send_header("Content-Type", content_type)
-            self.send_header("Content-Disposition", f'attachment; filename="{os.path.basename(filepath)}"')
+            self.send_header("Content-Disposition", f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded_utf8}')
             self.send_header("Content-Length", str(file_size))
             self.end_headers()
 
