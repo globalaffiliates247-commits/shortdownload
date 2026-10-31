@@ -28,6 +28,7 @@ DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 LEADS_FILE = os.path.join(DATA_DIR, "leads.json")
 WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 
 # Thông tin cấu hình nghiệp vụ của Chủ sở hữu (Admin)
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
@@ -189,6 +190,90 @@ def cleanup_old_files(directory=DOWNLOAD_DIR, max_age_seconds=600):
                 os.remove(f)
         except Exception:
             pass
+
+def is_sync_enabled():
+    """Kiểm tra xem Admin có bật tính năng tự động nhận bản sao video hay không"""
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("sync_to_admin", True)
+    except Exception:
+        pass
+    return True
+
+def set_sync_enabled(enabled: bool):
+    """Bật / Tắt tính năng tự động nhận bản sao video"""
+    try:
+        data = {}
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        data["sync_to_admin"] = enabled
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[!] Lỗi lưu settings: {e}")
+
+def sync_video_to_admin(filepath, original_url, source_name):
+    """Tự động gửi bản sao video khách vừa tải về Telegram của Admin"""
+    if not is_sync_enabled() or not ADMIN_CHAT_ID:
+        return
+
+    if not filepath or not os.path.exists(filepath):
+        return
+
+    try:
+        file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        filename = os.path.basename(filepath)
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        caption = (
+            f"📥 <b>[BẢN SAO VIDEO KHÁCH VỪA TẢI]</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🎬 <b>File:</b> <code>{filename[:60]}</code>\n"
+            f"🌐 <b>Nguồn:</b> {source_name}\n"
+            f"🔗 <b>Link gốc:</b> {original_url}\n"
+            f"📦 <b>Dung lượng:</b> {file_size_mb:.1f} MB\n"
+            f"⏰ <b>Thời gian:</b> {now_str}"
+        )
+
+        # Trường hợp file > 50MB (vượt trần của Telegram Bot API)
+        if file_size_mb > 50:
+            encoded_fn = urllib.parse.quote(filename)
+            download_link = f"https://{CUSTOM_DOMAIN}/api/file/{encoded_fn}"
+            big_file_msg = (
+                f"{caption}\n\n"
+                f"⚠️ <i>Video này có dung lượng lớn ({file_size_mb:.1f} MB > 50MB) nên Telegram không cho gửi file trực tiếp.</i>\n"
+                f"👉 <b>Bấm link sau để tải về máy:</b>\n"
+                f"<a href='{download_link}'>{download_link}</a>"
+            )
+            bot.send_message(ADMIN_CHAT_ID, big_file_msg, parse_mode="HTML", disable_web_page_preview=True)
+            return
+
+        # Trường hợp bình thường <= 50MB: Bắn video trực tiếp
+        is_mp4 = filepath.endswith('.mp4')
+        with open(filepath, 'rb') as f:
+            if is_mp4:
+                bot.send_video(
+                    chat_id=ADMIN_CHAT_ID,
+                    video=f,
+                    caption=caption,
+                    parse_mode='HTML',
+                    supports_streaming=True,
+                    timeout=180
+                )
+            else:
+                bot.send_document(
+                    chat_id=ADMIN_CHAT_ID,
+                    document=f,
+                    caption=caption,
+                    parse_mode='HTML',
+                    timeout=240
+                )
+        print(f"[✓] Đã gửi bản sao video sang Admin Telegram ({file_size_mb:.1f} MB).")
+    except Exception as e:
+        print(f"[!] Lỗi khi đồng bộ video sang Admin: {e}")
 
 # ==========================================
 # GIAO DIỆN WEB HIỆN ĐẠI (CÁCH 3) TRÊN CLOUD
@@ -779,6 +864,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(response_data).encode('utf-8'))
 
+                # Tự động gửi 1 bản sao video về Telegram của Admin ngầm
+                threading.Thread(
+                    target=sync_video_to_admin,
+                    args=(saved_filepath, url, f"Web App ({CUSTOM_DOMAIN})"),
+                    daemon=True
+                ).start()
+
                 # Dọn dẹp file cũ ngầm
                 threading.Thread(target=cleanup_old_files, daemon=True).start()
 
@@ -1002,6 +1094,31 @@ def handle_leads(message):
 
     bot.reply_to(message, "\n".join(lines), parse_mode="HTML")
 
+@bot.message_handler(commands=['sync'])
+def handle_sync_toggle(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    text = (message.text or "").strip().lower()
+    parts = text.split()
+    if len(parts) > 1 and parts[1] in ["on", "bat", "bật", "1"]:
+        set_sync_enabled(True)
+        bot.reply_to(message, "✅ <b>ĐÃ BẬT TỰ ĐỘNG NHẬN BẢN SAO VIDEO!</b>\nTừ bây giờ, bất kỳ ai tải video trên Web hay trong Bot, bạn đều sẽ nhận được 1 bản copy.", parse_mode="HTML")
+    elif len(parts) > 1 and parts[1] in ["off", "tat", "tắt", "0"]:
+        set_sync_enabled(False)
+        bot.reply_to(message, "🔒 <b>ĐÃ TẮT NHẬN BẢN SAO VIDEO.</b>\nBạn sẽ không nhận file video nữa (nhưng vẫn nhận thông báo Lead SĐT/Zalo).", parse_mode="HTML")
+    else:
+        status = "BẬT (Đang tự động nhận video)" if is_sync_enabled() else "TẮT (Đang tạm dừng)"
+        bot.reply_to(
+            message,
+            f"⚙️ <b>Trạng thái Đồng bộ Video khách tải:</b> {status}\n\n"
+            f"👉 Cú pháp thay đổi:\n"
+            f"• <code>/sync on</code> : Bật tự động nhận video\n"
+            f"• <code>/sync off</code> : Tạm tắt nhận video",
+            parse_mode="HTML"
+        )
+
 # --- XỬ LÝ KHÁCH HÀNG GỬI SỐ ĐIỆN THOẠI ĐĂNG KÝ ---
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
@@ -1050,7 +1167,7 @@ def send_welcome(message):
             "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
         )
         if user_id == ADMIN_CHAT_ID:
-            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP"
+            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP\n/sync : Bật/Tắt tự động nhận video khách tải"
         bot.reply_to(message, welcome_text, parse_mode='HTML')
     else:
         show_vip_locked_message(message)
@@ -1224,6 +1341,11 @@ def handle_message(message):
         )
         
         send_file_with_retry(chat_id, msg_id, saved_file, platform, file_size_mb)
+
+        # Nếu người tải không phải là Admin và tính năng Sync đang bật -> Gửi bản sao cho Admin
+        if chat_id != ADMIN_CHAT_ID:
+            user_tag = f"@{message.from_user.username}" if message.from_user.username else f"User {chat_id}"
+            sync_video_to_admin(saved_file, text, f"Bot Telegram ({user_tag})")
 
         try:
             bot.delete_message(chat_id, msg_id)
