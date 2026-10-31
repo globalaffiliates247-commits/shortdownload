@@ -29,9 +29,11 @@ os.makedirs(DATA_DIR, exist_ok=True)
 LEADS_FILE = os.path.join(DATA_DIR, "leads.json")
 WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+ADMIN_IPS_FILE = os.path.join(DATA_DIR, "admin_ips.json")
 
 # Thông tin cấu hình nghiệp vụ của Chủ sở hữu (Admin)
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "vip_admin_taio")
 ZALO_GROUP_URL = os.getenv("ZALO_GROUP_URL", "https://zalo.me/g/hhmdni386")
 TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_community_channel")
 CUSTOM_DOMAIN = os.getenv("CUSTOM_DOMAIN", "shotdownload.taio.club")
@@ -131,6 +133,111 @@ def save_whitelist(wl):
             json.dump(wl, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[!] Lỗi lưu whitelist: {e}")
+
+def load_admin_ips():
+    """Tải danh sách các IP của Admin / VIP được miễn kiểm tra quota và mở khóa mọi tính năng"""
+    ips = set()
+    env_ips = os.getenv("ADMIN_IPS", "")
+    if env_ips:
+        for ip in env_ips.split(","):
+            if ip.strip():
+                ips.add(ip.strip())
+    try:
+        if os.path.exists(ADMIN_IPS_FILE):
+            with open(ADMIN_IPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for ip in data:
+                        ips.add(str(ip).strip())
+                elif isinstance(data, dict):
+                    for ip in data.keys():
+                        ips.add(str(ip).strip())
+    except Exception as e:
+        print(f"[!] Lỗi đọc admin_ips: {e}")
+    return ips
+
+def save_admin_ip(ip, note="Registered via Web/Telegram"):
+    """Thêm một IP vào danh sách Admin / VIP bền vững"""
+    if not ip:
+        return
+    ip = ip.strip()
+    try:
+        data = {}
+        if os.path.exists(ADMIN_IPS_FILE):
+            with open(ADMIN_IPS_FILE, "r", encoding="utf-8") as f:
+                content = json.load(f)
+                if isinstance(content, dict):
+                    data = content
+                elif isinstance(content, list):
+                    data = {str(item): {"time": "legacy"} for item in content}
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        data[ip] = {
+            "time": now_str,
+            "note": note
+        }
+        with open(ADMIN_IPS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[✓] Đã lưu IP Admin/VIP: {ip} ({note})")
+    except Exception as e:
+        print(f"[!] Lỗi ghi admin_ips: {e}")
+
+def remove_admin_ip(ip):
+    """Xóa IP khỏi danh sách Admin"""
+    try:
+        if os.path.exists(ADMIN_IPS_FILE):
+            with open(ADMIN_IPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if ip in data:
+                del data[ip]
+                with open(ADMIN_IPS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                return True
+    except Exception:
+        pass
+    return False
+
+def is_admin_or_vip_request(handler, request_data=None):
+    """
+    Kiểm tra xem request từ Web có phải là Admin / VIP không.
+    Hỗ trợ 4 tầng nhận diện:
+    1. IP nằm trong danh sách Admin/VIP đã nạp (admin_ips.json hoặc ADMIN_IPS)
+    2. Cookie 'admin_token' khớp với ADMIN_TOKEN
+    3. Query param hoặc Header 'X-Admin-Token' khớp với ADMIN_TOKEN
+    4. Payload JSON có 'admin_token' khớp với ADMIN_TOKEN
+    """
+    client_ip = handler.headers.get('X-Forwarded-For', handler.client_address[0]).split(',')[0].strip()
+    admin_ips = load_admin_ips()
+    if client_ip in admin_ips:
+        return True, client_ip, "IP Whitelist"
+
+    auth_header = handler.headers.get('X-Admin-Token', '').strip()
+    if auth_header and auth_header == ADMIN_TOKEN:
+        save_admin_ip(client_ip, note="Auto-saved via X-Admin-Token header")
+        return True, client_ip, "Header Token"
+
+    cookie_header = handler.headers.get('Cookie', '')
+    if cookie_header:
+        for cookie_part in cookie_header.split(';'):
+            if '=' in cookie_part:
+                k, v = cookie_part.strip().split('=', 1)
+                if k == 'admin_token' and v == ADMIN_TOKEN:
+                    save_admin_ip(client_ip, note="Auto-saved via Cookie")
+                    return True, client_ip, "Cookie Session"
+
+    parsed = urllib.parse.urlparse(handler.path)
+    query_params = urllib.parse.parse_qs(parsed.query)
+    url_token = query_params.get('token', [''])[0] or query_params.get('vip', [''])[0]
+    if url_token and url_token == ADMIN_TOKEN:
+        save_admin_ip(client_ip, note="Auto-saved via URL query param")
+        return True, client_ip, "URL Token"
+
+    if request_data and isinstance(request_data, dict):
+        body_token = request_data.get('admin_token', '').strip()
+        if body_token and body_token == ADMIN_TOKEN:
+            save_admin_ip(client_ip, note="Auto-saved via Request Body")
+            return True, client_ip, "Body Token"
+
+    return False, client_ip, "Normal User"
 
 def save_lead(name, phone, email, source, extra=None):
     """Lưu thông tin khách hàng và bắn thông báo trực tiếp về Telegram của Admin"""
@@ -483,22 +590,87 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <footer class="text-center text-xs text-slate-600 py-3">
-    Universal Video Downloader &bull; Tương thích 100% iOS & Android &bull; Hotline / Zalo: Admin
+  <footer class="text-center text-xs text-slate-600 py-3 space-y-1">
+    <div>Universal Video Downloader &bull; Tương thích 100% iOS & Android</div>
+    <div id="vipAuthStatus" class="pt-1"></div>
   </footer>
 
+  <!-- MODAL XÁC THỰC ADMIN / VIP -->
+  <div id="vipAuthModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+    <div class="glass-modal w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-500/30">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+        <div class="flex items-center gap-2 text-amber-300 font-bold text-sm">
+          <i class="fa-solid fa-crown text-amber-400"></i>
+          <span>Xác thực Quản trị viên / VIP</span>
+        </div>
+        <button onclick="closeVipAuthModal()" class="text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Nhập mã định danh Admin / VIP để mở khóa vĩnh viễn quyền tải vô hạn và toàn bộ tính năng trên trình duyệt & IP này.
+      </p>
+      <div class="space-y-1.5">
+        <label class="text-[11px] font-medium text-slate-400">Mã bí mật Admin / VIP:</label>
+        <input id="vipTokenInput" type="password" placeholder="Nhập mã bí mật..." 
+               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500">
+      </div>
+      <div id="vipAuthError" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 p-2.5 text-xs"></div>
+      <button onclick="submitVipAuth()" id="vipAuthBtn" class="w-full bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-slate-950 font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-amber-500/20 transition text-xs">
+        Xác thực & Mở khóa ngay
+      </button>
+      <p class="text-[10px] text-slate-500 text-center">
+        Mẹo: Gõ lệnh <code>/adminweb</code> trong Telegram Bot để nhận link tự động mở VIP 1 chạm.
+      </p>
+    </div>
+  </div>
+
   <script>
+    // Engine Nhận diện Quản trị viên & Phân quyền VIP
+    const serverIsVip = __IS_ADMIN_VIP__;
+    const serverClientIp = "__CLIENT_IP__";
+    const serverAdminToken = "__ADMIN_TOKEN__";
+    let localToken = localStorage.getItem('admin_token') || '';
+
+    // Nhận diện magic token từ URL (?token=... hoặc ?vip=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramToken = urlParams.get('token') || urlParams.get('vip');
+    if (paramToken) {
+      localToken = paramToken;
+      localStorage.setItem('admin_token', paramToken);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    const isVipUser = serverIsVip || (localToken && localToken === serverAdminToken);
+
     // Quota Engine
     let quota = parseInt(localStorage.getItem('dl_free_quota') || '3');
     
     function updateQuotaUI() {
+      const banner = document.getElementById('quotaBanner');
       const badge = document.getElementById('quotaCount');
-      if (quota <= 0) {
-        badge.innerText = '0 lượt (Hết)';
-        badge.className = 'font-bold text-rose-400 bg-rose-400/10 px-2 py-0.5 rounded-lg border border-rose-400/20';
-      } else {
-        badge.innerText = quota + ' lượt';
-        badge.className = 'font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20';
+      if (isVipUser) {
+        if (banner) {
+          banner.className = "flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-500/30 px-4 py-2.5 rounded-2xl text-xs";
+          banner.innerHTML = `
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-crown text-amber-400 text-sm"></i>
+              <span class="text-amber-200 font-bold">Quản trị viên (VIP):</span>
+              <span class="font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-lg border border-amber-400/30">Vô hạn lượt</span>
+            </div>
+            <span class="text-[10px] text-amber-300/90 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-medium">IP: ${serverClientIp}</span>
+          `;
+        }
+        return;
+      }
+      if (badge) {
+        if (quota <= 0) {
+          badge.innerText = '0 lượt (Hết)';
+          badge.className = 'font-bold text-rose-400 bg-rose-400/10 px-2 py-0.5 rounded-lg border border-rose-400/20';
+        } else {
+          badge.innerText = quota + ' lượt';
+          badge.className = 'font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20';
+        }
       }
     }
     updateQuotaUI();
@@ -509,6 +681,59 @@ HTML_PAGE = """<!DOCTYPE html>
 
     function closeUnlockModal() {
       document.getElementById('unlockModal').classList.add('hidden');
+    }
+
+    function openVipAuthModal() {
+      document.getElementById('vipAuthModal').classList.remove('hidden');
+    }
+
+    function closeVipAuthModal() {
+      document.getElementById('vipAuthModal').classList.add('hidden');
+    }
+
+    async function submitVipAuth() {
+      const token = document.getElementById('vipTokenInput').value.trim();
+      const errBox = document.getElementById('vipAuthError');
+      const btn = document.getElementById('vipAuthBtn');
+      if (!token) {
+        errBox.innerText = 'Vui lòng nhập mã bí mật!';
+        errBox.classList.remove('hidden');
+        return;
+      }
+      btn.disabled = true;
+      btn.innerText = 'Đang kiểm tra...';
+      try {
+        const resp = await fetch('/api/auth/vip', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ token: token })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          localStorage.setItem('admin_token', token);
+          alert('✓ Xác thực Quản trị viên thành công! Trình duyệt và IP của bạn đã được ghi nhận.');
+          window.location.reload();
+        } else {
+          errBox.innerText = data.error || 'Mã xác thực không hợp lệ!';
+          errBox.classList.remove('hidden');
+        }
+      } catch (e) {
+        errBox.innerText = 'Lỗi kết nối: ' + e.message;
+        errBox.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Xác thực & Mở khóa ngay';
+      }
+    }
+
+    // Cập nhật trạng thái VIP tại Footer
+    const statusDiv = document.getElementById('vipAuthStatus');
+    if (statusDiv) {
+      if (isVipUser) {
+        statusDiv.innerHTML = '<span class="text-[11px] text-amber-400/90 font-medium"><i class="fa-solid fa-crown text-amber-400 mr-1"></i>Đã nhận diện: Thiết bị & IP Quản trị viên (Không giới hạn tính năng)</span>';
+      } else {
+        statusDiv.innerHTML = '<button onclick="openVipAuthModal()" class="text-[11px] text-slate-500 hover:text-slate-400 underline transition"><i class="fa-solid fa-key mr-1"></i>Đăng nhập VIP / Quản trị viên</button>';
+      }
     }
 
     function markStep(type) {
@@ -622,9 +847,9 @@ HTML_PAGE = """<!DOCTYPE html>
         return;
       }
 
-      // Kiểm tra nếu là link YouTube -> Thông báo đặc quyền VIP / Trả phí
+      // Kiểm tra nếu là link YouTube và KHÔNG PHẢI VIP -> Thông báo đặc quyền VIP / Trả phí
       const lowerUrl = url.toLowerCase();
-      if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
+      if (!isVipUser && (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be'))) {
         statusBox.className = "block bg-amber-500/15 border border-amber-500/30 text-amber-200 p-5 rounded-2xl text-xs space-y-3";
         statusBox.innerHTML = `
           <div class="font-bold text-sm text-amber-300 flex items-center gap-2">
@@ -649,8 +874,8 @@ HTML_PAGE = """<!DOCTYPE html>
         return;
       }
 
-      // Kiểm tra Quota
-      if (quota <= 0) {
+      // Kiểm tra Quota (chỉ áp dụng cho người dùng thông thường)
+      if (!isVipUser && quota <= 0) {
         openUnlockModal();
         return;
       }
@@ -664,17 +889,25 @@ HTML_PAGE = """<!DOCTYPE html>
       try {
         const response = await fetch('/api/download', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ url: url })
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Token': localToken || ''
+          },
+          body: JSON.stringify({ 
+            url: url,
+            admin_token: localToken || ''
+          })
         });
 
         const data = await response.json();
 
         if (response.ok && data.success) {
-          // Trừ 1 lượt tải
-          quota = Math.max(0, quota - 1);
-          localStorage.setItem('dl_free_quota', quota.toString());
-          updateQuotaUI();
+          // Chỉ trừ lượt nếu là người dùng thông thường
+          if (!isVipUser) {
+            quota = Math.max(0, quota - 1);
+            localStorage.setItem('dl_free_quota', quota.toString());
+            updateQuotaUI();
+          }
 
           statusBox.className = "block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-sm";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Tải và chuẩn hóa video thành công!';
@@ -701,11 +934,23 @@ HTML_PAGE = """<!DOCTYPE html>
           document.body.removeChild(autoDownloadLink);
 
           // Nếu hết lượt sau lần tải này, hiển thị nhắc mở khóa sau 2.5 giây
-          if (quota === 0) {
+          if (!isVipUser && quota === 0) {
             setTimeout(() => {
               openUnlockModal();
             }, 2500);
           }
+        } else {
+          statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
+          statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
+        }
+      } catch (err) {
+        statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
+        statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi kết nối: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Tải video khác</span>';
+      }
+    }
         } else {
           statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
@@ -761,6 +1006,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path == "/" or path == "/index.html":
+            # Kiểm tra phân quyền Admin / VIP qua IP, Cookie, Token
+            is_admin, client_ip, auth_reason = is_admin_or_vip_request(self)
+
             # Lấy username bot thật nếu có để tạo link mở bot chuẩn xác
             bot_username = "Clipbot"
             try:
@@ -773,9 +1021,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
             html_rendered = HTML_PAGE.replace("__ZALO_GROUP_URL__", ZALO_GROUP_URL)
             html_rendered = html_rendered.replace("__TELEGRAM_GROUP_URL__", TELEGRAM_GROUP_URL)
             html_rendered = html_rendered.replace("__TELEGRAM_BOT_URL__", f"https://t.me/{bot_username}")
+            html_rendered = html_rendered.replace("__IS_ADMIN_VIP__", "true" if is_admin else "false")
+            html_rendered = html_rendered.replace("__CLIENT_IP__", client_ip)
+            html_rendered = html_rendered.replace("__ADMIN_TOKEN__", ADMIN_TOKEN)
 
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            if is_admin:
+                self.send_header("Set-Cookie", f"admin_token={ADMIN_TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")
             self.end_headers()
             self.wfile.write(html_rendered.encode('utf-8'))
 
@@ -815,7 +1068,39 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/lead":
+        if parsed.path == "/api/auth/vip":
+            client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                token = (data.get("token") or "").strip()
+                if token and token == ADMIN_TOKEN:
+                    save_admin_ip(client_ip, note="Authenticated via Web /api/auth/vip")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Set-Cookie", f"admin_token={ADMIN_TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "success": True,
+                        "message": "Xác thực Quản trị viên thành công!",
+                        "ip": client_ip
+                    }).encode('utf-8'))
+                else:
+                    self.send_response(401)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "success": False,
+                        "error": "Mã xác thực Admin / VIP không chính xác!"
+                    }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        elif parsed.path == "/api/lead":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
             try:
@@ -853,8 +1138,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 if not url:
                     raise ValueError("URL không được để trống")
 
-                # Kiểm tra chặn YouTube trên Web App (Tính năng VIP / Trả phí)
-                if downloader.is_youtube_url(url):
+                # Kiểm tra phân quyền Admin / VIP
+                is_admin, client_ip, auth_reason = is_admin_or_vip_request(self, data)
+
+                # KIỂM TRA CHẶN YOUTUBE:
+                # CHỈ ÁP DỤNG ĐỐI VỚI NGƯỜI DÙNG THÔNG THƯỜNG / VÃNG LAI TRÊN WEB
+                # ĐỐI VỚI ADMIN / VIP: BỎ QUA VÀ TIẾN HÀNH TẢI LUÔN
+                if downloader.is_youtube_url(url) and not is_admin:
                     self.send_response(403)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.end_headers()
@@ -1157,6 +1447,90 @@ def handle_sync_toggle(message):
             parse_mode="HTML"
         )
 
+# --- CÁC LỆNH QUẢN LÝ IP & WEB VIP DÀNH CHO ADMIN ---
+@bot.message_handler(commands=['adminweb', 'vipurl'])
+def handle_adminweb(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    magic_url = f"https://{CUSTOM_DOMAIN}/?token={ADMIN_TOKEN}"
+    reply_text = (
+        "👑 <b>LINK TRUY CẬP WEB DÀNH RIÊNG CHO ADMIN (VIP VÔ HẠN):</b>\n\n"
+        f"👉 <a href='{magic_url}'>Bấm vào đây để mở Web VIP trên Điện thoại</a>\n\n"
+        "✨ <b>Đặc quyền tự động khi mở link:</b>\n"
+        "• Tự động kích hoạt vĩnh viễn quyền Admin/VIP trên Safari / Chrome điện thoại.\n"
+        "• Tự động nạp IP điện thoại của bạn vào danh sách trắng (Whitelist IP).\n"
+        "• Lượt tải vô hạn (không bị giới hạn 3 lượt).\n"
+        "• Mở khóa tải YouTube ngay lập tức mà không cần hành động/trả phí.\n"
+        "• Không bao giờ hiển thị popup thu thập thông tin Lead."
+    )
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("🚀 Mở Web VIP Ngay", url=magic_url))
+    bot.reply_to(message, reply_text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+
+@bot.message_handler(commands=['myips'])
+def handle_myips(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    ips = load_admin_ips()
+    if not ips:
+        bot.reply_to(message, "ℹ️ Chưa có IP nào trong danh sách whitelist.\nBạn có thể dùng lệnh /adminweb để tự động nạp IP điện thoại chỉ với 1 chạm!", parse_mode="HTML")
+        return
+
+    lines = [f"📋 <b>DANH SÁCH IP ADMIN / VIP ĐÃ NẠP ({len(ips)}):</b>\n"]
+    for ip in sorted(list(ips)):
+        lines.append(f"• <code>{ip}</code>")
+    lines.append("\n💡 <i>Mọi thiết bị dùng các IP này khi vào Web sẽ tự động được cấp quyền VIP không giới hạn.</i>")
+    bot.reply_to(message, "\n".join(lines), parse_mode="HTML")
+
+@bot.message_handler(commands=['addip'])
+def handle_addip(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    parts = (message.text or "").strip().split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ Cú pháp: <code>/addip &lt;địa_chỉ_IP&gt;</code>\nVí dụ: <code>/addip 113.190.234.56</code>", parse_mode="HTML")
+        return
+
+    target_ip = parts[1].strip()
+    save_admin_ip(target_ip, note="Added via Telegram /addip")
+    bot.reply_to(message, f"✅ Đã thêm IP <code>{target_ip}</code> vào danh sách Admin/VIP thành công!", parse_mode="HTML")
+
+@bot.message_handler(commands=['delip'])
+def handle_delip(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    parts = (message.text or "").strip().split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ Cú pháp: <code>/delip &lt;địa_chỉ_IP&gt;</code>", parse_mode="HTML")
+        return
+
+    target_ip = parts[1].strip()
+    if remove_admin_ip(target_ip):
+        bot.reply_to(message, f"🔒 Đã xóa IP <code>{target_ip}</code> khỏi danh sách Admin.", parse_mode="HTML")
+    else:
+        bot.reply_to(message, f"ℹ️ Không tìm thấy IP <code>{target_ip}</code> trong danh sách.", parse_mode="HTML")
+
+@bot.message_handler(commands=['myip'])
+def handle_myip_cmd(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    bot.reply_to(
+        message,
+        "💡 <b>Cách nhận diện IP điện thoại 1 chạm:</b>\n\n"
+        "Bạn hãy gõ lệnh /adminweb và bấm nút mở web. Hệ thống sẽ tự động bắt IP của bạn và lưu vĩnh viễn vào danh sách Admin mà không cần nhập số IP thủ công!",
+        parse_mode="HTML"
+    )
+
 # --- XỬ LÝ KHÁCH HÀNG GỬI SỐ ĐIỆN THOẠI ĐĂNG KÝ ---
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
@@ -1205,7 +1579,7 @@ def send_welcome(message):
             "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
         )
         if user_id == ADMIN_CHAT_ID:
-            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP\n/sync : Bật/Tắt tự động nhận video khách tải"
+            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/adminweb : Link mở Web VIP 1 chạm (tự động nạp IP điện thoại)\n/myips : Xem danh sách IP Admin/VIP\n/addip : Thêm IP Admin thủ công\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP\n/sync : Bật/Tắt tự động nhận video"
         bot.reply_to(message, welcome_text, parse_mode='HTML')
     else:
         show_vip_locked_message(message)
@@ -1256,8 +1630,8 @@ def handle_message(message):
         bot.reply_to(message, "⚠️ Vui lòng gửi một đường link video hợp lệ (bắt đầu bằng https://...)")
         return
 
-    # Chặn tải YouTube đối với thành viên thông thường -> Hướng dẫn kích hoạt gói VIP
-    if downloader.is_youtube_url(text) and user_id != ADMIN_CHAT_ID:
+    # Chặn tải YouTube: Chỉ áp dụng đối với người dùng chưa kích hoạt VIP
+    if downloader.is_youtube_url(text) and not is_whitelisted:
         vip_markup = telebot.types.InlineKeyboardMarkup()
         vip_markup.add(
             telebot.types.InlineKeyboardButton("💬 Vào Nhóm Zalo Kích Hoạt VIP", url=ZALO_GROUP_URL)
