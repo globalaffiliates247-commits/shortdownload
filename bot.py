@@ -1,8 +1,10 @@
 import os
 import sys
+import re
 import time
 import glob
 import json
+import datetime
 import mimetypes
 import threading
 import urllib.parse
@@ -22,8 +24,89 @@ executor = ThreadPoolExecutor(max_workers=3)
 DOWNLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "data"))
+os.makedirs(DATA_DIR, exist_ok=True)
+LEADS_FILE = os.path.join(DATA_DIR, "leads.json")
+WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
+
+# Thông tin cấu hình nghiệp vụ của Chủ sở hữu (Admin)
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
+ZALO_GROUP_URL = os.getenv("ZALO_GROUP_URL", "https://zalo.me/g/hhmdni386")
+TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_community_channel")
+
+# ==========================================
+# QUẢN LÝ DỮ LIỆU & PHÂN QUYỀN VIP
+# ==========================================
+def load_whitelist():
+    """Tải danh sách các Telegram User ID đã được Admin cấp quyền VIP"""
+    try:
+        if os.path.exists(WHITELIST_FILE):
+            with open(WHITELIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[!] Lỗi đọc whitelist: {e}")
+    # Mặc định Admin luôn nằm trong whitelist
+    return {str(ADMIN_CHAT_ID): {"name": "Admin", "phone": "Admin", "time": "Initial"}}
+
+def save_whitelist(wl):
+    """Lưu danh sách cấp quyền VIP vào file"""
+    try:
+        with open(WHITELIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(wl, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[!] Lỗi lưu whitelist: {e}")
+
+def save_lead(name, phone, email, source, extra=None):
+    """Lưu thông tin khách hàng và bắn thông báo trực tiếp về Telegram của Admin"""
+    leads = []
+    try:
+        if os.path.exists(LEADS_FILE):
+            with open(LEADS_FILE, "r", encoding="utf-8") as f:
+                leads = json.load(f)
+    except Exception:
+        leads = []
+
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lead_entry = {
+        "name": name,
+        "phone": phone,
+        "email": email or "",
+        "source": source,
+        "created_at": now_str,
+        "extra": extra or {}
+    }
+    leads.append(lead_entry)
+
+    try:
+        with open(LEADS_FILE, "w", encoding="utf-8") as f:
+            json.dump(leads, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[!] Lỗi ghi lead: {e}")
+
+    # Bắn thông báo ngay lập tức cho Admin qua Telegram
+    if bot and ADMIN_CHAT_ID:
+        try:
+            admin_msg = (
+                f"🔔 <b>[CÓ KHÁCH HÀNG MỚI ĐĂNG KÝ]</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>Họ tên:</b> {name}\n"
+                f"📞 <b>SĐT / Zalo:</b> <code>{phone}</code>\n"
+                f"📧 <b>Email:</b> {email or 'Không để lại'}\n"
+                f"🌐 <b>Nguồn:</b> {source}\n"
+                f"⏰ <b>Thời gian:</b> {now_str}\n"
+            )
+            if source == "telegram_bot" and extra and "user_id" in extra:
+                uid = extra["user_id"]
+                admin_msg += f"\n👉 <b>Bấm lệnh sau để DUYỆT VIP cho khách:</b>\n/duyet_{uid}"
+
+            bot.send_message(ADMIN_CHAT_ID, admin_msg, parse_mode="HTML")
+        except Exception as e:
+            print(f"[!] Lỗi gửi thông báo lead tới Admin: {e}")
+
+    return lead_entry
+
 def cleanup_old_files(directory=DOWNLOAD_DIR, max_age_seconds=600):
-    """Tự động dọn dẹp file tạm cũ hơn 10 phút để tránh đầy ổ cứng máy chủ"""
+    """Tự động dọn dẹp file tạm cũ hơn 10 phút để tránh đầy dung lượng máy chủ"""
     now = time.time()
     for f in glob.glob(os.path.join(directory, "*")):
         try:
@@ -34,6 +117,7 @@ def cleanup_old_files(directory=DOWNLOAD_DIR, max_age_seconds=600):
 
 # ==========================================
 # GIAO DIỆN WEB HIỆN ĐẠI (CÁCH 3) TRÊN CLOUD
+# TÍCH HỢP QUOTA 3 LẦN + VIRAL LEAD GATE
 # ==========================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="vi">
@@ -45,11 +129,24 @@ HTML_PAGE = """<!DOCTYPE html>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body { background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .glass { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .glass-modal { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(99, 102, 241, 0.3); }
   </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6">
-  <div class="w-full max-w-xl mx-auto my-auto space-y-6">
+  <div class="w-full max-w-xl mx-auto my-auto space-y-5">
+    
+    <!-- Top Bar: Community Link -->
+    <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+      <span class="inline-flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Hệ thống hoạt động ổn định
+      </span>
+      <a href="__ZALO_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 transition font-medium">
+        <i class="fa-solid fa-users"></i> Tham gia Nhóm Zalo
+      </a>
+    </div>
+
     <!-- Header -->
     <div class="text-center space-y-2">
       <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-500 to-indigo-600 shadow-lg shadow-indigo-500/30">
@@ -59,7 +156,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <p class="text-sm text-slate-400">Hỗ trợ YouTube, Facebook Reels & TikTok không logo</p>
       
       <!-- Supported Badges -->
-      <div class="flex items-center justify-center gap-2 pt-2">
+      <div class="flex items-center justify-center gap-2 pt-1">
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
           <i class="fa-brands fa-youtube"></i> YouTube
         </span>
@@ -73,7 +170,20 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
 
     <!-- Main Card -->
-    <div class="glass rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+    <div class="glass rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4">
+      
+      <!-- Quota Status Banner -->
+      <div id="quotaBanner" class="flex items-center justify-between bg-slate-900/80 border border-slate-700/60 px-4 py-2.5 rounded-2xl text-xs">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-gift text-indigo-400"></i>
+          <span class="text-slate-300">Lượt tải miễn phí:</span>
+          <span id="quotaCount" class="font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20">3 lượt</span>
+        </div>
+        <button onclick="openUnlockModal()" class="text-indigo-400 hover:text-indigo-300 font-medium underline text-[11px]">
+          Nhận thêm lượt <i class="fa-solid fa-arrow-up-right-from-square ml-0.5"></i>
+        </button>
+      </div>
+
       <div class="space-y-2">
         <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Dán link video cần tải</label>
         <div class="relative flex items-center">
@@ -103,34 +213,232 @@ HTML_PAGE = """<!DOCTYPE html>
             <p id="videoAuthor" class="text-xs text-slate-400 mt-1"></p>
           </div>
         </div>
-        <a id="saveFileBtn" href="#" class="w-full block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl text-sm transition font-semibold">
+        <a id="saveFileBtn" href="#" class="w-full block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl text-sm transition font-semibold shadow-lg shadow-emerald-600/20">
           <i class="fa-solid fa-cloud-arrow-down mr-1"></i> Bấm để lưu video về máy
         </a>
       </div>
     </div>
 
-    <!-- Telegram Bot Quick Access -->
-    <div class="glass rounded-2xl p-4 text-xs text-slate-400 flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center text-base">
+    <!-- Telegram Bot VIP Card -->
+    <div class="glass rounded-2xl p-4 text-xs text-slate-400 flex items-center justify-between border border-sky-500/20">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-lg flex-shrink-0">
           <i class="fa-brands fa-telegram"></i>
         </div>
         <div>
-          <div class="text-white font-semibold">Bot Telegram 24/7</div>
-          <div class="text-slate-400 text-[11px]">Gửi link trong chat là nhận lại video</div>
+          <div class="text-white font-semibold flex items-center gap-1.5">
+            Bot Telegram 24/7
+            <span class="bg-amber-400/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-bold border border-amber-400/30">VIP</span>
+          </div>
+          <div class="text-slate-400 text-[11px] mt-0.5">Tải video ngay trong chat • Cần đăng ký kích hoạt</div>
         </div>
       </div>
-      <a href="https://t.me/Clipbot" target="_blank" class="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-medium transition text-xs">
-        Mở Bot
+      <a href="__TELEGRAM_BOT_URL__" target="_blank" class="px-3 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold transition text-xs shadow-md shadow-sky-500/20 flex-shrink-0">
+        Mở Bot VIP
       </a>
     </div>
   </div>
 
-  <footer class="text-center text-xs text-slate-600 py-4">
-    Universal Video Downloader &bull; Tương thích 100% iOS & Android
+  <!-- MODAL MỞ KHÓA NHIỆM VỤ (LEAD GATE & VIRAL LOOP) -->
+  <div id="unlockModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+    <div class="glass-modal w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+      
+      <!-- Close Button -->
+      <button onclick="closeUnlockModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <!-- Modal Header -->
+      <div class="text-center space-y-1.5 pt-1">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white text-xl shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-gift"></i>
+        </div>
+        <h3 class="text-xl font-bold text-white">Mở Khóa Lượt Tải & Quà VIP</h3>
+        <p class="text-xs text-slate-400">Bạn đã dùng hết 3 lượt tải miễn phí. Hoàn tất 3 bước dưới đây để nhận thêm <b>+5 lượt tải</b> và quyền kích hoạt Bot Telegram 24/7!</p>
+      </div>
+
+      <!-- Error box inside modal -->
+      <div id="modalError" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 p-3 text-xs"></div>
+
+      <!-- Step 1: Lead Information -->
+      <div class="space-y-2.5">
+        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">1</span>
+          Thông tin liên hệ nhận quyền VIP
+        </label>
+        <div class="space-y-2">
+          <input id="leadName" type="text" placeholder="Họ và tên của bạn *" 
+                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <input id="leadPhone" type="tel" placeholder="Số điện thoại / Zalo *" 
+                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <input id="leadEmail" type="email" placeholder="Email nhận ưu đãi (không bắt buộc)" 
+                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+
+      <!-- Step 2: Join Community -->
+      <div class="space-y-2">
+        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">2</span>
+          Tham gia cộng đồng hỗ trợ
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <a id="btnZaloJoin" href="__ZALO_GROUP_URL__" target="_blank" onclick="markStep('zalo')"
+             class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-medium transition text-center">
+            <i class="fa-solid fa-comments"></i> 
+            <span id="zaloLabel">Nhóm Zalo</span>
+          </a>
+          <a id="btnTeleJoin" href="__TELEGRAM_GROUP_URL__" target="_blank" onclick="markStep('tele')"
+             class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 text-sky-300 text-xs font-medium transition text-center">
+            <i class="fa-brands fa-telegram"></i> 
+            <span id="teleLabel">Kênh Tele VIP</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Step 3: Viral Share -->
+      <div class="space-y-2">
+        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">3</span>
+          Chia sẻ lan tỏa công cụ
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="shareFacebook()" 
+                  class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium transition">
+            <i class="fa-brands fa-facebook"></i> Share Facebook
+          </button>
+          <button onclick="copyShareLink()" 
+                  class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium transition">
+            <i class="fa-solid fa-link"></i> <span id="copyLabel">Copy link giới thiệu</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button id="modalSubmitBtn" onclick="submitUnlockForm()" class="w-full bg-gradient-to-r from-emerald-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 text-sm">
+        <span>✨ Hoàn tất & Mở khóa (+5 lượt tải)</span>
+      </button>
+
+      <p class="text-[10px] text-center text-slate-500">Thông tin của bạn được bảo mật và dùng để hỗ trợ kích hoạt tài khoản.</p>
+    </div>
+  </div>
+
+  <footer class="text-center text-xs text-slate-600 py-3">
+    Universal Video Downloader &bull; Tương thích 100% iOS & Android &bull; Hotline / Zalo: Admin
   </footer>
 
   <script>
+    // Quota Engine
+    let quota = parseInt(localStorage.getItem('dl_free_quota') || '3');
+    
+    function updateQuotaUI() {
+      const badge = document.getElementById('quotaCount');
+      if (quota <= 0) {
+        badge.innerText = '0 lượt (Hết)';
+        badge.className = 'font-bold text-rose-400 bg-rose-400/10 px-2 py-0.5 rounded-lg border border-rose-400/20';
+      } else {
+        badge.innerText = quota + ' lượt';
+        badge.className = 'font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20';
+      }
+    }
+    updateQuotaUI();
+
+    function openUnlockModal() {
+      document.getElementById('unlockModal').classList.remove('hidden');
+    }
+
+    function closeUnlockModal() {
+      document.getElementById('unlockModal').classList.add('hidden');
+    }
+
+    function markStep(type) {
+      if (type === 'zalo') {
+        document.getElementById('zaloLabel').innerHTML = '✓ Đã tham gia Zalo';
+      } else if (type === 'tele') {
+        document.getElementById('teleLabel').innerHTML = '✓ Đã tham gia Tele';
+      }
+    }
+
+    function shareFacebook() {
+      const url = encodeURIComponent(window.location.origin);
+      window.open('https://www.facebook.com/sharer/sharer.php?u=' + url, '_blank', 'width=600,height=400');
+    }
+
+    function copyShareLink() {
+      const shareText = "Tải video Facebook Reels, TikTok không logo cực nhanh và nét tại: " + window.location.origin;
+      navigator.clipboard.writeText(shareText).then(() => {
+        document.getElementById('copyLabel').innerText = '✓ Đã chép link!';
+        setTimeout(() => {
+          document.getElementById('copyLabel').innerText = 'Copy link giới thiệu';
+        }, 3000);
+      });
+    }
+
+    async function submitUnlockForm() {
+      const name = document.getElementById('leadName').value.trim();
+      const phone = document.getElementById('leadPhone').value.trim();
+      const email = document.getElementById('leadEmail').value.trim();
+      const modalError = document.getElementById('modalError');
+
+      if (!name) {
+        modalError.innerText = 'Vui lòng nhập họ và tên của bạn!';
+        modalError.classList.remove('hidden');
+        return;
+      }
+
+      const cleanPhone = phone.replace(/\\D/g, '');
+      if (cleanPhone.length < 9) {
+        modalError.innerText = 'Vui lòng nhập số điện thoại / Zalo hợp lệ (tối thiểu 9 số)!';
+        modalError.classList.remove('hidden');
+        return;
+      }
+
+      modalError.classList.add('hidden');
+      const submitBtn = document.getElementById('modalSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang kích hoạt lượt tải...';
+
+      try {
+        const response = await fetch('/api/lead', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            name: name,
+            phone: phone,
+            email: email,
+            source: 'Web Unlock (Lead Gate)'
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+          quota += (data.bonus || 5);
+          localStorage.setItem('dl_free_quota', quota.toString());
+          localStorage.setItem('lead_registered', 'true');
+          updateQuotaUI();
+          closeUnlockModal();
+
+          const statusBox = document.getElementById('statusBox');
+          statusBox.className = "block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-sm";
+          statusBox.innerHTML = '<i class="fa-solid fa-gift mr-1"></i> <b>Chúc mừng!</b> Bạn đã được mở khóa thêm ' + (data.bonus || 5) + ' lượt tải và quyền ưu tiên duyệt Bot VIP!';
+          
+          const currentUrl = document.getElementById('videoUrl').value.trim();
+          if (currentUrl) {
+            handleDownload();
+          }
+        } else {
+          modalError.innerText = data.error || 'Có lỗi xảy ra, vui lòng thử lại!';
+          modalError.classList.remove('hidden');
+        }
+      } catch (err) {
+        modalError.innerText = 'Lỗi kết nối máy chủ: ' + err.message;
+        modalError.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>✨ Hoàn tất & Mở khóa (+5 lượt tải)</span>';
+      }
+    }
+
     // Nút Dán nhanh từ Clipboard
     document.getElementById('pasteBtn').addEventListener('click', async () => {
       try {
@@ -154,6 +462,12 @@ HTML_PAGE = """<!DOCTYPE html>
         return;
       }
 
+      // Kiểm tra Quota
+      if (quota <= 0) {
+        openUnlockModal();
+        return;
+      }
+
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Đang xử lý & tải từ nguồn...</span>';
       statusBox.className = "block bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 p-4 rounded-2xl text-sm";
@@ -170,6 +484,11 @@ HTML_PAGE = """<!DOCTYPE html>
         const data = await response.json();
 
         if (response.ok && data.success) {
+          // Trừ 1 lượt tải
+          quota = Math.max(0, quota - 1);
+          localStorage.setItem('dl_free_quota', quota.toString());
+          updateQuotaUI();
+
           statusBox.className = "block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-sm";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Tải và chuẩn hóa video thành công!';
           
@@ -193,6 +512,13 @@ HTML_PAGE = """<!DOCTYPE html>
           document.body.appendChild(autoDownloadLink);
           autoDownloadLink.click();
           document.body.removeChild(autoDownloadLink);
+
+          // Nếu hết lượt sau lần tải này, hiển thị nhắc mở khóa sau 2.5 giây
+          if (quota === 0) {
+            setTimeout(() => {
+              openUnlockModal();
+            }, 2500);
+          }
         } else {
           statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
@@ -211,6 +537,30 @@ HTML_PAGE = """<!DOCTYPE html>
 """
 
 # ==========================================
+# KHỞI TẠO TELEGRAM BOT (CÁCH 2)
+# ==========================================
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+if not BOT_TOKEN and os.path.exists(".env"):
+    with open(".env") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("TELEGRAM_BOT_TOKEN="):
+                BOT_TOKEN = line.split("=", 1)[1].strip("'\" ")
+                break
+
+if not BOT_TOKEN and len(sys.argv) > 1:
+    BOT_TOKEN = sys.argv[1].strip()
+
+if not BOT_TOKEN:
+    print("=" * 60)
+    print(" [!] THIẾU TELEGRAM_BOT_TOKEN")
+    print("=" * 60)
+    sys.exit(1)
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# ==========================================
 # MÁY CHỦ HTTP WEBSERVICE TÍCH HỢP (RENDER)
 # ==========================================
 class WebAppHandler(BaseHTTPRequestHandler):
@@ -219,10 +569,23 @@ class WebAppHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path == "/" or path == "/index.html":
+            # Lấy username bot thật nếu có để tạo link mở bot chuẩn xác
+            bot_username = "Clipbot"
+            try:
+                me = bot.get_me()
+                if me and me.username:
+                    bot_username = me.username
+            except Exception:
+                pass
+
+            html_rendered = HTML_PAGE.replace("__ZALO_GROUP_URL__", ZALO_GROUP_URL)
+            html_rendered = html_rendered.replace("__TELEGRAM_GROUP_URL__", TELEGRAM_GROUP_URL)
+            html_rendered = html_rendered.replace("__TELEGRAM_BOT_URL__", f"https://t.me/{bot_username}")
+
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(HTML_PAGE.encode('utf-8'))
+            self.wfile.write(html_rendered.encode('utf-8'))
 
         elif path.startswith("/api/file/"):
             filename = urllib.parse.unquote(path[len("/api/file/"):])
@@ -260,7 +623,32 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/download":
+        if parsed.path == "/api/lead":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                name = data.get("name", "").strip()
+                phone = data.get("phone", "").strip()
+                email = data.get("email", "").strip()
+                source = data.get("source", "Web Unlock (Lead Gate)")
+
+                if not name or not phone:
+                    raise ValueError("Họ tên và số điện thoại không được để trống!")
+
+                save_lead(name=name, phone=phone, email=email, source=source)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "bonus": 5}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        elif parsed.path == "/api/download":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
             try:
@@ -312,29 +700,8 @@ def start_web_server():
     server.serve_forever()
 
 # ==========================================
-# KHỞI TẠO TELEGRAM BOT (CÁCH 2)
+# CÁC HÀM XỬ LÝ VÀ PHÂN QUYỀN BOT TELEGRAM
 # ==========================================
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-if not BOT_TOKEN and os.path.exists(".env"):
-    with open(".env") as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("TELEGRAM_BOT_TOKEN="):
-                BOT_TOKEN = line.split("=", 1)[1].strip("'\" ")
-                break
-
-if not BOT_TOKEN and len(sys.argv) > 1:
-    BOT_TOKEN = sys.argv[1].strip()
-
-if not BOT_TOKEN:
-    print("=" * 60)
-    print(" [!] THIẾU TELEGRAM_BOT_TOKEN")
-    print("=" * 60)
-    sys.exit(1)
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
 def safe_edit(chat_id, message_id, text):
     """Cập nhật nội dung tin nhắn an toàn"""
     try:
@@ -397,22 +764,235 @@ def send_file_with_retry(chat_id, msg_id, file_path, platform, file_size_mb):
         raise last_error
     return False
 
+def show_vip_locked_message(message):
+    """Hiển thị thông báo tính năng VIP và bàn phím gửi SĐT đăng ký"""
+    first_name = message.from_user.first_name or "bạn"
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    btn_phone = telebot.types.KeyboardButton("📱 Gửi số điện thoại kích hoạt", request_contact=True)
+    btn_zalo = telebot.types.KeyboardButton("💬 Vào Nhóm Zalo Hỗ Trợ")
+    markup.row(btn_phone)
+    markup.row(btn_zalo)
+
+    bot.reply_to(
+        message,
+        f"🔒 <b>TÍNH NĂNG BOT TELEGRAM 24/7 DÀNH CHO THÀNH VIÊN VIP</b>\n\n"
+        f"Chào <b>{first_name}</b>! Tính năng tải video tự động 24/7 không giới hạn trực tiếp qua Telegram "
+        f"là đặc quyền dành cho học viên và thành viên đã kích hoạt.\n\n"
+        f"🎁 <b>Cách đăng ký kích hoạt tài khoản:</b>\n"
+        f"1️⃣ Bấm nút <b>'📱 Gửi số điện thoại kích hoạt'</b> bên dưới (hoặc gõ số điện thoại Zalo của bạn).\n"
+        f"2️⃣ Tham gia <b>Nhóm Zalo hỗ trợ</b> để được duyệt nhanh nhất:\n"
+        f"👉 <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>\n\n"
+        f"🌐 <i>Bạn cũng có thể trải nghiệm phiên bản Web miễn phí tại:</i>\n"
+        f"https://shortdownload-pybt.onrender.com",
+        parse_mode="HTML",
+        reply_markup=markup,
+        disable_web_page_preview=True
+    )
+
+# --- CÁC LỆNH DÀNH RIÊNG CHO ADMIN ---
+@bot.message_handler(commands=['myid'])
+def handle_myid(message):
+    bot.reply_to(
+        message,
+        f"🆔 <b>Chat ID của bạn là:</b> <code>{message.chat.id}</code>\n"
+        f"👤 <b>Tên:</b> {message.from_user.first_name}\n"
+        f"🌐 <b>Username:</b> @{message.from_user.username or 'Không có'}",
+        parse_mode="HTML"
+    )
+
+@bot.message_handler(func=lambda msg: (msg.text or '').startswith('/duyet_'))
+def handle_duyet(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    match = re.match(r'^/duyet_(\d+)$', message.text.strip())
+    if not match:
+        bot.reply_to(message, "⚠️ Cú pháp không hợp lệ. Ví dụ: /duyet_123456789")
+        return
+
+    target_id = match.group(1)
+    wl = load_whitelist()
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    wl[str(target_id)] = {
+        "activated_at": now_str,
+        "approved_by": "admin"
+    }
+    save_whitelist(wl)
+
+    bot.reply_to(message, f"✅ <b>ĐÃ DUYỆT THÀNH CÔNG!</b>\nUser ID: <code>{target_id}</code> đã được cấp quyền VIP sử dụng bot 24/7.", parse_mode="HTML")
+
+    # Bắn tin nhắn chúc mừng và hướng dẫn cho khách
+    try:
+        rm_markup = telebot.types.ReplyKeyboardRemove()
+        bot.send_message(
+            int(target_id),
+            "🎉 <b>CHÚC MỪNG BẠN!</b>\n\n"
+            "Tài khoản của bạn đã được Admin phê duyệt kích hoạt quyền <b>VIP</b> thành công!\n"
+            "Từ bây giờ, bạn có thể gửi link TikTok, Facebook Reels hoặc YouTube bất kỳ vào đây để tải video 24/7 hoàn toàn tự động.\n\n"
+            "👉 Hãy dán thử 1 đường link ngay nhé!",
+            parse_mode="HTML",
+            reply_markup=rm_markup
+        )
+    except Exception as e:
+        bot.reply_to(message, f"⚠️ Đã lưu duyệt nhưng không gửi được tin nhắn tới user ({e}).")
+
+@bot.message_handler(func=lambda msg: (msg.text or '').startswith('/khoa_'))
+def handle_khoa(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    match = re.match(r'^/khoa_(\d+)$', message.text.strip())
+    if not match:
+        bot.reply_to(message, "⚠️ Cú pháp không hợp lệ. Ví dụ: /khoa_123456789")
+        return
+
+    target_id = match.group(1)
+    if int(target_id) == ADMIN_CHAT_ID:
+        bot.reply_to(message, "⚠️ Không thể khóa chính Admin.")
+        return
+
+    wl = load_whitelist()
+    if str(target_id) in wl:
+        del wl[str(target_id)]
+        save_whitelist(wl)
+        bot.reply_to(message, f"🔒 Đã khóa quyền VIP của User ID: <code>{target_id}</code>.", parse_mode="HTML")
+    else:
+        bot.reply_to(message, f"ℹ️ User ID <code>{target_id}</code> không có trong danh sách VIP.", parse_mode="HTML")
+
+@bot.message_handler(commands=['danhsach'])
+def handle_danhsach(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    wl = load_whitelist()
+    lines = [f"📋 <b>DANH SÁCH THÀNH VIÊN VIP ({len(wl)}):</b>\n"]
+    for uid, info in list(wl.items())[-20:]:
+        lines.append(f"• <code>{uid}</code> (Duyệt: {info.get('activated_at', 'N/A')})")
+
+    bot.reply_to(message, "\n".join(lines), parse_mode="HTML")
+
+@bot.message_handler(commands=['leads'])
+def handle_leads(message):
+    if message.chat.id != ADMIN_CHAT_ID:
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        return
+
+    leads = []
+    if os.path.exists(LEADS_FILE):
+        try:
+            with open(LEADS_FILE, "r", encoding="utf-8") as f:
+                leads = json.load(f)
+        except Exception:
+            leads = []
+
+    if not leads:
+        bot.reply_to(message, "ℹ️ Chưa có dữ liệu khách hàng nào.")
+        return
+
+    lines = [f"📊 <b>10 KHÁCH HÀNG MỚI NHẤT ({len(leads)} tổng cộng):</b>\n"]
+    for l in leads[-10:]:
+        lines.append(f"• <b>{l.get('name')}</b> - <code>{l.get('phone')}</code> ({l.get('source')}) - {l.get('created_at')}")
+
+    bot.reply_to(message, "\n".join(lines), parse_mode="HTML")
+
+# --- XỬ LÝ KHÁCH HÀNG GỬI SỐ ĐIỆN THOẠI ĐĂNG KÝ ---
+@bot.message_handler(content_types=['contact'])
+def handle_contact(message):
+    if not message.contact:
+        return
+    phone = message.contact.phone_number
+    user_id = message.from_user.id
+    name = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
+    username = f"@{message.from_user.username}" if message.from_user.username else "Không có"
+
+    save_lead(
+        name=name,
+        phone=phone,
+        email="",
+        source="telegram_bot",
+        extra={"user_id": user_id, "username": username}
+    )
+
+    rm_markup = telebot.types.ReplyKeyboardRemove()
+    bot.reply_to(
+        message,
+        f"✅ <b>ĐÃ TIẾP NHẬN YÊU CẦU KÍCH HOẠT!</b>\n\n"
+        f"• Họ tên: <b>{name}</b>\n"
+        f"• Số điện thoại: <code>{phone}</code>\n"
+        f"• Telegram ID: <code>{user_id}</code>\n\n"
+        f"Admin đã nhận được thông tin và sẽ phê duyệt kích hoạt cho bạn trong giây lát.\n"
+        f"👉 Bạn hãy tham gia nhóm Zalo để được duyệt ngay: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+        parse_mode="HTML",
+        reply_markup=rm_markup,
+        disable_web_page_preview=True
+    )
+
+# --- CÁC TIN NHẮN VĂN BẢN VÀ LINK TẢI VIDEO ---
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    welcome_text = (
-        "👋 Chào bạn! Tôi là <b>Bot tải Video tự động</b>.\n\n"
-        "✨ Hỗ trợ tải chất lượng cao không logo:\n"
-        "• 🔴 YouTube / Shorts\n"
-        "• 🔵 Facebook Reels / Video\n"
-        "• ⚫ TikTok Video & Album ảnh\n\n"
-        "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
-    )
-    bot.reply_to(message, welcome_text, parse_mode='HTML')
+    user_id = message.from_user.id
+    wl = load_whitelist()
+
+    if user_id == ADMIN_CHAT_ID or str(user_id) in wl:
+        welcome_text = (
+            "👋 Chào bạn! Tôi là <b>Bot tải Video tự động (Bản VIP)</b>.\n\n"
+            "✨ Hỗ trợ tải chất lượng cao không logo:\n"
+            "• 🔴 YouTube / Shorts\n"
+            "• 🔵 Facebook Reels / Video\n"
+            "• ⚫ TikTok Video & Album ảnh\n\n"
+            "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
+        )
+        if user_id == ADMIN_CHAT_ID:
+            welcome_text += "\n\n👑 <b>Menu Quản trị viên:</b>\n/leads : Xem khách hàng mới\n/danhsach : Xem danh sách VIP"
+        bot.reply_to(message, welcome_text, parse_mode='HTML')
+    else:
+        show_vip_locked_message(message)
 
 @bot.message_handler(func=lambda msg: True)
 def handle_message(message):
     text = (message.text or "").strip()
-    
+    user_id = message.from_user.id
+    wl = load_whitelist()
+    is_whitelisted = (user_id == ADMIN_CHAT_ID) or (str(user_id) in wl)
+
+    # Nút bấm menu phụ
+    if text == "💬 Vào Nhóm Zalo Hỗ Trợ":
+        bot.reply_to(message, f"👉 Tham gia nhóm Zalo hỗ trợ tại: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>", parse_mode="HTML")
+        return
+
+    # Nếu người dùng nhập số điện thoại bằng tay để đăng ký
+    clean_digits = re.sub(r'[^\d+]', '', text)
+    if not is_whitelisted and ((clean_digits.startswith('0') and len(clean_digits) in (10, 11)) or (clean_digits.startswith('+84') and len(clean_digits) in (11, 12))):
+        name = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
+        username = f"@{message.from_user.username}" if message.from_user.username else "Không có"
+        save_lead(
+            name=name,
+            phone=clean_digits,
+            email="",
+            source="telegram_bot",
+            extra={"user_id": user_id, "username": username}
+        )
+        rm_markup = telebot.types.ReplyKeyboardRemove()
+        bot.reply_to(
+            message,
+            f"✅ <b>ĐÃ TIẾP NHẬN SỐ ĐIỆN THOẠI {clean_digits}!</b>\n\n"
+            f"Yêu cầu kích hoạt của bạn đã được gửi tới Admin. Vui lòng chờ phê duyệt trong giây lát.\n"
+            f"👉 Nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+            parse_mode="HTML",
+            reply_markup=rm_markup,
+            disable_web_page_preview=True
+        )
+        return
+
+    # Nếu chưa kích hoạt VIP mà gửi tin nhắn hoặc link
+    if not is_whitelisted:
+        show_vip_locked_message(message)
+        return
+
+    # --- ĐỐI VỚI THÀNH VIÊN ĐÃ KÍCH HOẠT VIP ---
     if not (text.startswith("http://") or text.startswith("https://")):
         bot.reply_to(message, "⚠️ Vui lòng gửi một đường link video hợp lệ (bắt đầu bằng https://...)")
         return
@@ -522,7 +1102,9 @@ if __name__ == '__main__':
     threading.Thread(target=start_web_server, daemon=True).start()
     port = os.getenv("PORT", "8080")
     print("=" * 60)
-    print(" 🚀 UNIVERSAL VIDEO DOWNLOADER (Web App + Telegram Bot 2-in-1)")
+    print(" 🚀 UNIVERSAL VIDEO DOWNLOADER (Web App Quota + VIP Bot Lead Funnel)")
+    print(f" 👑 Admin Chat ID: {ADMIN_CHAT_ID}")
+    print(f" 💬 Zalo Group: {ZALO_GROUP_URL}")
     print(f" 🌐 Web App Online tại PORT: {port}")
     print("=" * 60)
     bot.infinity_polling()
