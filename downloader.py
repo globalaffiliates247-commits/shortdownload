@@ -23,7 +23,13 @@ def get_yt_dlp():
     return yt_dlp
 
 def is_tiktok_url(url: str) -> bool:
-    return "tiktok.com" in url.lower()
+    return bool(url and "tiktok.com" in url.lower())
+
+def is_youtube_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return "youtube.com" in u or "youtu.be" in u
 
 def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """

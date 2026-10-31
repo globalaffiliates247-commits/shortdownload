@@ -313,12 +313,12 @@ HTML_PAGE = """<!DOCTYPE html>
         <i class="fa-solid fa-cloud-arrow-down text-2xl text-white"></i>
       </div>
       <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Tải Video Đa Năng</h1>
-      <p class="text-sm text-slate-400">Hỗ trợ YouTube, Facebook Reels & TikTok không logo</p>
+      <p class="text-sm text-slate-400">Tải TikTok không logo, Facebook Reels & YouTube VIP</p>
       
       <!-- Supported Badges -->
       <div class="flex items-center justify-center gap-2 pt-1">
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-          <i class="fa-brands fa-youtube"></i> YouTube
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <i class="fa-brands fa-youtube"></i> YouTube <span class="text-[9px] bg-amber-500/20 px-1 py-0.5 rounded font-bold">VIP</span>
         </span>
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
           <i class="fa-brands fa-facebook"></i> FB Reels
@@ -622,6 +622,33 @@ HTML_PAGE = """<!DOCTYPE html>
         return;
       }
 
+      // Kiểm tra nếu là link YouTube -> Thông báo đặc quyền VIP / Trả phí
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be')) {
+        statusBox.className = "block bg-amber-500/15 border border-amber-500/30 text-amber-200 p-5 rounded-2xl text-xs space-y-3";
+        statusBox.innerHTML = `
+          <div class="font-bold text-sm text-amber-300 flex items-center gap-2">
+            <i class="fa-solid fa-crown text-amber-400"></i> Tính năng Tải YouTube là Đặc quyền VIP
+          </div>
+          <p class="text-slate-300 leading-relaxed text-xs">
+            Hiện tại trích xuất video YouTube chất lượng cao (1080p, 4K, Tách âm thanh) là tiện ích nâng cao dành riêng cho thành viên đã kích hoạt gói VIP.
+          </p>
+          <div class="pt-1 flex flex-wrap items-center gap-2">
+            <a href="__ZALO_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition text-xs shadow-md shadow-blue-600/20">
+              <i class="fa-solid fa-comments"></i> Liên hệ Zalo kích hoạt
+            </a>
+            <button onclick="openUnlockModal()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium transition text-xs">
+              <i class="fa-solid fa-gift"></i> Đăng ký nhận ưu đãi
+            </button>
+          </div>
+          <div class="text-[11px] text-slate-400 border-t border-amber-500/20 pt-2 flex items-center gap-1">
+            <i class="fa-solid fa-circle-info text-sky-400"></i>
+            <span>Mẹo: Bạn vẫn có thể tải <b>miễn phí 100%</b> video từ <b>TikTok (không logo)</b> và <b>Facebook Reels</b>!</span>
+          </div>
+        `;
+        return;
+      }
+
       // Kiểm tra Quota
       if (quota <= 0) {
         openUnlockModal();
@@ -822,9 +849,20 @@ class WebAppHandler(BaseHTTPRequestHandler):
             ticket = None
             try:
                 data = json.loads(body.decode('utf-8'))
-                url = data.get("url")
+                url = (data.get("url") or "").strip()
                 if not url:
                     raise ValueError("URL không được để trống")
+
+                # Kiểm tra chặn YouTube trên Web App (Tính năng VIP / Trả phí)
+                if downloader.is_youtube_url(url):
+                    self.send_response(403)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "success": False,
+                        "error": "Tính năng trích xuất video YouTube là đặc quyền VIP. Vui lòng liên hệ Admin qua nhóm Zalo để được kích hoạt gói VIP!"
+                    }).encode('utf-8'))
+                    return
 
                 # Đăng ký slot trong hàng đợi tuần tự chung của máy chủ
                 ok, reason, ticket = download_queue.request_slot(user_key, timeout_seconds=90)
@@ -1159,11 +1197,11 @@ def send_welcome(message):
 
     if user_id == ADMIN_CHAT_ID or str(user_id) in wl:
         welcome_text = (
-            "👋 Chào bạn! Tôi là <b>Bot tải Video tự động (Bản VIP)</b>.\n\n"
+            "👋 Chào bạn! Tôi là <b>Bot tải Video tự động</b>.\n\n"
             "✨ Hỗ trợ tải chất lượng cao không logo:\n"
-            "• 🔴 YouTube / Shorts\n"
-            "• 🔵 Facebook Reels / Video\n"
-            "• ⚫ TikTok Video & Album ảnh\n\n"
+            "• ⚫ TikTok Video & Album ảnh (Miễn phí 100%)\n"
+            "• 🔵 Facebook Reels & Video (Miễn phí 100%)\n"
+            "• 🔴 YouTube / Shorts (Gói VIP Nâng cao)\n\n"
             "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
         )
         if user_id == ADMIN_CHAT_ID:
@@ -1216,6 +1254,24 @@ def handle_message(message):
     # --- ĐỐI VỚI THÀNH VIÊN ĐÃ KÍCH HOẠT VIP ---
     if not (text.startswith("http://") or text.startswith("https://")):
         bot.reply_to(message, "⚠️ Vui lòng gửi một đường link video hợp lệ (bắt đầu bằng https://...)")
+        return
+
+    # Chặn tải YouTube đối với thành viên thông thường -> Hướng dẫn kích hoạt gói VIP
+    if downloader.is_youtube_url(text) and user_id != ADMIN_CHAT_ID:
+        vip_markup = telebot.types.InlineKeyboardMarkup()
+        vip_markup.add(
+            telebot.types.InlineKeyboardButton("💬 Vào Nhóm Zalo Kích Hoạt VIP", url=ZALO_GROUP_URL)
+        )
+        bot.reply_to(
+            message,
+            "👑 <b>Tính năng Tải YouTube là Đặc quyền VIP!</b>\n\n"
+            "Hiện tại trích xuất video YouTube chất lượng cao (1080p, 4K, Tách âm thanh) là tiện ích nâng cao dành riêng cho gói VIP riêng biệt.\n\n"
+            f"👉 Vui lòng liên hệ Admin qua nhóm Zalo để được hỗ trợ kích hoạt: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>\n\n"
+            "💡 <i>Mẹo: Bạn vẫn có thể tải hoàn toàn <b>MIỄN PHÍ & KHÔNG GIỚI HẠN</b> video từ <b>TikTok (không logo)</b> và <b>Facebook Reels</b>!</i>",
+            parse_mode="HTML",
+            reply_markup=vip_markup,
+            disable_web_page_preview=True
+        )
         return
 
     platform = "Video"
