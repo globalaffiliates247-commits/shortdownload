@@ -203,7 +203,7 @@ def get_base_ydl_opts():
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'tv_embedded', 'mweb', 'web_creator'],
+                'player_client': ['ios', 'tv_embedded', 'mweb', 'web_creator', 'android'],
                 'player_skip': ['webpage', 'configs']
             }
         }

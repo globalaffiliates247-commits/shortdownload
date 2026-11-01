@@ -420,576 +420,852 @@ HTML_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Universal Video Downloader</title>
+  <title>TAIO Video Downloader Studio | Tải Video Đa Năng</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    .glass { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.1); }
-    .glass-modal { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(99, 102, 241, 0.3); }
+    /* Desktop OS Styles */
+    body {
+      background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #090d16 60%, #030712 100%);
+      color: #f1f5f9;
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    /* Windows 11 Fluent Theme */
+    .win-mode {
+      font-family: 'Segoe UI', 'Segoe UI Variable', system-ui, sans-serif;
+    }
+    .win-mode .os-window {
+      background: rgba(30, 32, 40, 0.94);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+    .win-mode .os-titlebar {
+      background: rgba(22, 24, 30, 0.85);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 9px 9px 0 0;
+    }
+    .win-mode .win-control-btn {
+      width: 46px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .win-mode .win-control-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+    .win-mode .win-close-btn:hover {
+      background: #e81123 !important;
+      color: #ffffff !important;
+    }
+
+    /* macOS Cupertino Theme */
+    .mac-mode {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    }
+    .mac-mode .os-window {
+      background: rgba(26, 31, 46, 0.82);
+      backdrop-filter: blur(35px) saturate(190%);
+      -webkit-backdrop-filter: blur(35px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      box-shadow: 0 30px 70px -12px rgba(0, 0, 0, 0.85), 0 0 1px 1px rgba(255, 255, 255, 0.12);
+    }
+    .mac-mode .os-titlebar {
+      background: rgba(18, 22, 33, 0.7);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 17px 17px 0 0;
+    }
+    .mac-mode .mac-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    .mac-mode .mac-dot:hover svg {
+      opacity: 1;
+    }
+
+    /* Custom Scrollbar & Inputs */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+    .glow-effect {
+      box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.3);
+    }
   </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6">
-  <div class="w-full max-w-xl mx-auto my-auto space-y-5">
-    
-    <!-- Top Bar: Community Link -->
-    <div class="flex items-center justify-between text-xs text-slate-400 px-1">
-      <span class="inline-flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        Hệ thống hoạt động ổn định
-      </span>
-      <a href="__ZALO_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 transition font-medium">
-        <i class="fa-solid fa-users"></i> Tham gia Nhóm Zalo
-      </a>
-    </div>
+<body id="osBody" class="win-mode flex flex-col justify-between p-3 sm:p-6 transition-all duration-300">
 
-    <!-- Header -->
-    <div class="text-center space-y-2">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-500 to-indigo-600 shadow-lg shadow-indigo-500/30">
-        <i class="fa-solid fa-cloud-arrow-down text-2xl text-white"></i>
+  <!-- TOP HEADER / BRAND BAR -->
+  <header class="w-full max-w-4xl mx-auto flex items-center justify-between py-2 px-1 text-xs text-slate-400">
+    <!-- TAIO Brand Logo -->
+    <div class="flex items-center gap-3">
+      <div class="relative w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-400 via-indigo-500 to-fuchsia-500 p-[1.5px] shadow-lg shadow-indigo-500/25">
+        <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+          <svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+        </div>
       </div>
-      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Tải Video Đa Năng</h1>
-      <p class="text-sm text-slate-400">Tải TikTok không logo, Facebook Reels & YouTube VIP</p>
-      
-      <!-- Supported Badges -->
-      <div class="flex items-center justify-center gap-2 pt-1">
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-          <i class="fa-brands fa-youtube"></i> YouTube <span class="text-[9px] bg-amber-500/20 px-1 py-0.5 rounded font-bold">VIP</span>
-        </span>
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-          <i class="fa-brands fa-facebook"></i> FB Reels
-        </span>
-        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-          <i class="fa-brands fa-tiktok"></i> TikTok
-        </span>
-      </div>
-    </div>
-
-    <!-- Main Card -->
-    <div class="glass rounded-3xl p-5 sm:p-7 shadow-2xl space-y-4">
-      
-      <!-- Quota Status Banner -->
-      <div id="quotaBanner" class="flex items-center justify-between bg-slate-900/80 border border-slate-700/60 px-4 py-2.5 rounded-2xl text-xs">
+      <div>
         <div class="flex items-center gap-2">
-          <i class="fa-solid fa-gift text-indigo-400"></i>
-          <span class="text-slate-300">Lượt tải miễn phí:</span>
-          <span id="quotaCount" class="font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20">3 lượt</span>
+          <span class="text-base font-extrabold tracking-wider text-white">TAIO<span class="text-indigo-400">.CLUB</span></span>
+          <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">PRO STUDIO</span>
         </div>
-        <button onclick="openUnlockModal()" class="text-indigo-400 hover:text-indigo-300 font-medium underline text-[11px]">
-          Nhận thêm lượt <i class="fa-solid fa-arrow-up-right-from-square ml-0.5"></i>
-        </button>
-      </div>
-
-      <div class="space-y-2">
-        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Dán link video cần tải</label>
-        <div class="relative flex items-center">
-          <input id="videoUrl" type="url" placeholder="https://www.facebook.com/reel/... hoặc tiktok, youtube" 
-                 class="w-full bg-slate-900/90 border border-slate-700 rounded-2xl px-4 py-3.5 pl-11 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
-          <i class="fa-solid fa-link absolute left-4 text-slate-500"></i>
-          <button id="pasteBtn" class="absolute right-3 px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 rounded-lg border border-slate-700 transition">
-            Dán
-          </button>
-        </div>
-      </div>
-
-      <button id="downloadBtn" onclick="handleDownload()" class="w-full bg-gradient-to-r from-indigo-500 hover:from-indigo-600 to-violet-600 hover:to-violet-700 text-white font-semibold py-3.5 px-4 rounded-2xl shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-        <i class="fa-solid fa-download"></i>
-        <span>Bắt đầu tải video</span>
-      </button>
-
-      <!-- Status indicator -->
-      <div id="statusBox" class="hidden rounded-2xl p-4 text-sm transition-all"></div>
-
-      <!-- Preview card -->
-      <div id="previewCard" class="hidden space-y-3 pt-3 border-t border-slate-700/50">
-        <div class="flex gap-3 items-center">
-          <img id="thumbImg" src="" class="w-20 h-20 object-cover rounded-xl bg-slate-800 flex-shrink-0" alt="Thumbnail">
-          <div class="overflow-hidden">
-            <h4 id="videoTitle" class="text-sm font-semibold text-white line-clamp-2"></h4>
-            <p id="videoAuthor" class="text-xs text-slate-400 mt-1"></p>
-          </div>
-        </div>
-        <a id="saveFileBtn" href="#" class="w-full block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl text-sm transition font-semibold shadow-lg shadow-emerald-600/20">
-          <i class="fa-solid fa-cloud-arrow-down mr-1"></i> Bấm để lưu video về máy
-        </a>
+        <p class="text-[11px] text-slate-400 font-normal">Trình Tải Video Đa Năng Chuẩn Desktop</p>
       </div>
     </div>
 
-    <!-- Telegram Bot VIP Card -->
-    <div class="glass rounded-2xl p-4 text-xs text-slate-400 flex items-center justify-between border border-sky-500/20">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-lg flex-shrink-0">
-          <i class="fa-brands fa-telegram"></i>
-        </div>
-        <div>
-          <div class="text-white font-semibold flex items-center gap-1.5">
-            Bot Telegram 24/7
-            <span class="bg-amber-400/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-bold border border-amber-400/30">VIP</span>
-          </div>
-          <div class="text-slate-400 text-[11px] mt-0.5">Tải video ngay trong chat • Cần đăng ký kích hoạt</div>
-        </div>
-      </div>
-      <a href="__TELEGRAM_BOT_URL__" target="_blank" class="px-3 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold transition text-xs shadow-md shadow-sky-500/20 flex-shrink-0">
-        Mở Bot VIP
+    <!-- Quick Community Links -->
+    <div class="flex items-center gap-2 sm:gap-3">
+      <span class="hidden sm:inline-flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+        Online 24/7
+      </span>
+      <a href="__TELEGRAM_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 transition font-medium bg-sky-500/10 px-2.5 py-1.5 rounded-lg border border-sky-500/20">
+        <i class="fa-brands fa-telegram"></i>
+        <span>Nhóm Tele</span>
+      </a>
+      <a href="__ZALO_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 transition font-medium bg-blue-500/10 px-2.5 py-1.5 rounded-lg border border-blue-500/20">
+        <i class="fa-solid fa-users"></i>
+        <span>Nhóm Zalo</span>
       </a>
     </div>
-  </div>
+  </header>
 
-  <!-- MODAL MỞ KHÓA NHIỆM VỤ (LEAD GATE & VIRAL LOOP) -->
-  <div id="unlockModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-    <div class="glass-modal w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+  <!-- MAIN DESKTOP WINDOW CONTAINER -->
+  <main class="w-full max-w-4xl mx-auto my-auto py-3">
+    <div id="desktopWindow" class="os-window transition-all duration-300">
       
-      <!-- Close Button -->
-      <button onclick="closeUnlockModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white transition">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-
-      <!-- Modal Header -->
-      <div class="text-center space-y-1.5 pt-1">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white text-xl shadow-lg shadow-indigo-500/30">
-          <i class="fa-solid fa-gift"></i>
-        </div>
-        <h3 class="text-xl font-bold text-white">Mở Khóa Lượt Tải & Quà VIP</h3>
-        <p class="text-xs text-slate-400">Bạn đã dùng hết 3 lượt tải miễn phí. Hoàn tất 3 bước dưới đây để nhận thêm <b>+5 lượt tải</b> và quyền kích hoạt Bot Telegram 24/7!</p>
-      </div>
-
-      <!-- Error box inside modal -->
-      <div id="modalError" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 p-3 text-xs"></div>
-
-      <!-- Step 1: Lead Information -->
-      <div class="space-y-2.5">
-        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">1</span>
-          Thông tin liên hệ nhận quyền VIP
-        </label>
-        <div class="space-y-2">
-          <input id="leadName" type="text" placeholder="Họ và tên của bạn *" 
-                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <input id="leadPhone" type="tel" placeholder="Số điện thoại / Zalo *" 
-                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <input id="leadEmail" type="email" placeholder="Email nhận ưu đãi (không bắt buộc)" 
-                 class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-        </div>
-      </div>
-
-      <!-- Step 2: Join Community -->
-      <div class="space-y-2">
-        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">2</span>
-          Tham gia cộng đồng hỗ trợ
-        </label>
-        <div class="grid grid-cols-2 gap-2">
-          <a id="btnZaloJoin" href="__ZALO_GROUP_URL__" target="_blank" onclick="markStep('zalo')"
-             class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-medium transition text-center">
-            <i class="fa-solid fa-comments"></i> 
-            <span id="zaloLabel">Nhóm Zalo</span>
-          </a>
-          <a id="btnTeleJoin" href="__TELEGRAM_GROUP_URL__" target="_blank" onclick="markStep('tele')"
-             class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 text-sky-300 text-xs font-medium transition text-center">
-            <i class="fa-brands fa-telegram"></i> 
-            <span id="teleLabel">Kênh Tele VIP</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Step 3: Viral Share -->
-      <div class="space-y-2">
-        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-          <span class="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] flex items-center justify-center font-bold">3</span>
-          Chia sẻ lan tỏa công cụ
-        </label>
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="shareFacebook()" 
-                  class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium transition">
-            <i class="fa-brands fa-facebook"></i> Share Facebook
-          </button>
-          <button onclick="copyShareLink()" 
-                  class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium transition">
-            <i class="fa-solid fa-link"></i> <span id="copyLabel">Copy link giới thiệu</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Submit Button -->
-      <button id="modalSubmitBtn" onclick="submitUnlockForm()" class="w-full bg-gradient-to-r from-emerald-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 text-sm">
-        <span>✨ Hoàn tất & Mở khóa (+5 lượt tải)</span>
-      </button>
-
-      <p class="text-[10px] text-center text-slate-500">Thông tin của bạn được bảo mật và dùng để hỗ trợ kích hoạt tài khoản.</p>
-    </div>
-  </div>
-
-  <footer class="text-center text-xs text-slate-600 py-3 space-y-1">
-    <div>Universal Video Downloader &bull; Tương thích 100% iOS & Android</div>
-    <div id="vipAuthStatus" class="pt-1"></div>
-  </footer>
-
-  <!-- MODAL XÁC THỰC ADMIN / VIP -->
-  <div id="vipAuthModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-    <div class="glass-modal w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-500/30">
-      <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
-        <div class="flex items-center gap-2 text-amber-300 font-bold text-sm">
-          <i class="fa-solid fa-crown text-amber-400"></i>
-          <span>Xác thực Quản trị viên / VIP</span>
-        </div>
-        <button onclick="closeVipAuthModal()" class="text-slate-400 hover:text-white transition">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-      <p class="text-xs text-slate-300 leading-relaxed">
-        Nhập mã định danh Admin / VIP để mở khóa vĩnh viễn quyền tải vô hạn và toàn bộ tính năng trên trình duyệt & IP này.
-      </p>
-      <div class="space-y-1.5">
-        <label class="text-[11px] font-medium text-slate-400">Mã bí mật Admin / VIP:</label>
-        <input id="vipTokenInput" type="password" placeholder="Nhập mã bí mật..." 
-               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500">
-      </div>
-      <div id="vipAuthError" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 p-2.5 text-xs"></div>
-      <button onclick="submitVipAuth()" id="vipAuthBtn" class="w-full bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-slate-950 font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-amber-500/20 transition text-xs">
-        Xác thực & Mở khóa ngay
-      </button>
-      <p class="text-[10px] text-slate-500 text-center">
-        Mẹo: Gõ lệnh <code>/adminweb</code> trong Telegram Bot để nhận link tự động mở VIP 1 chạm.
-      </p>
-    </div>
-  </div>
-
-  <script>
-    // Engine Nhận diện Quản trị viên & Phân quyền VIP
-    const serverIsVip = __IS_ADMIN_VIP__;
-    const serverClientIp = "__CLIENT_IP__";
-    const serverAdminToken = "__ADMIN_TOKEN__";
-    let localToken = localStorage.getItem('admin_token') || '';
-
-    // Nhận diện magic token từ URL (?token=... hoặc ?vip=...)
-    const urlParams = new URLSearchParams(window.location.search);
-    const paramToken = urlParams.get('token') || urlParams.get('vip');
-    if (paramToken) {
-      localToken = paramToken;
-      localStorage.setItem('admin_token', paramToken);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    const isVipUser = serverIsVip || (localToken && localToken === serverAdminToken);
-
-    // Quota Engine
-    let quota = parseInt(localStorage.getItem('dl_free_quota') || '3');
-    
-    function updateQuotaUI() {
-      const banner = document.getElementById('quotaBanner');
-      const badge = document.getElementById('quotaCount');
-      if (isVipUser) {
-        if (banner) {
-          banner.className = "flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-500/30 px-4 py-2.5 rounded-2xl text-xs";
-          banner.innerHTML = `
-            <div class="flex items-center gap-2">
-              <i class="fa-solid fa-crown text-amber-400 text-sm"></i>
-              <span class="text-amber-200 font-bold">Quản trị viên (VIP):</span>
-              <span class="font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-lg border border-amber-400/30">Vô hạn lượt</span>
-            </div>
-            <span class="text-[10px] text-amber-300/90 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-medium">IP: ${serverClientIp}</span>
-          `;
-        }
-        return;
-      }
-      if (badge) {
-        if (quota <= 0) {
-          badge.innerText = '0 lượt (Hết)';
-          badge.className = 'font-bold text-rose-400 bg-rose-400/10 px-2 py-0.5 rounded-lg border border-rose-400/20';
-        } else {
-          badge.innerText = quota + ' lượt';
-          badge.className = 'font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20';
-        }
-      }
-    }
-    updateQuotaUI();
-
-    function openUnlockModal() {
-      document.getElementById('unlockModal').classList.remove('hidden');
-    }
-
-    function closeUnlockModal() {
-      document.getElementById('unlockModal').classList.add('hidden');
-    }
-
-    function openVipAuthModal() {
-      document.getElementById('vipAuthModal').classList.remove('hidden');
-    }
-
-    function closeVipAuthModal() {
-      document.getElementById('vipAuthModal').classList.add('hidden');
-    }
-
-    async function submitVipAuth() {
-      const token = document.getElementById('vipTokenInput').value.trim();
-      const errBox = document.getElementById('vipAuthError');
-      const btn = document.getElementById('vipAuthBtn');
-      if (!token) {
-        errBox.innerText = 'Vui lòng nhập mã bí mật!';
-        errBox.classList.remove('hidden');
-        return;
-      }
-      btn.disabled = true;
-      btn.innerText = 'Đang kiểm tra...';
-      try {
-        const resp = await fetch('/api/auth/vip', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ token: token })
-        });
-        const data = await resp.json();
-        if (resp.ok && data.success) {
-          localStorage.setItem('admin_token', token);
-          alert('✓ Xác thực Quản trị viên thành công! Trình duyệt và IP của bạn đã được ghi nhận.');
-          window.location.reload();
-        } else {
-          errBox.innerText = data.error || 'Mã xác thực không hợp lệ!';
-          errBox.classList.remove('hidden');
-        }
-      } catch (e) {
-        errBox.innerText = 'Lỗi kết nối: ' + e.message;
-        errBox.classList.remove('hidden');
-      } finally {
-        btn.disabled = false;
-        btn.innerText = 'Xác thực & Mở khóa ngay';
-      }
-    }
-
-    // Cập nhật trạng thái VIP tại Footer
-    const statusDiv = document.getElementById('vipAuthStatus');
-    if (statusDiv) {
-      if (isVipUser) {
-        statusDiv.innerHTML = '<span class="text-[11px] text-amber-400/90 font-medium"><i class="fa-solid fa-crown text-amber-400 mr-1"></i>Đã nhận diện: Thiết bị & IP Quản trị viên (Không giới hạn tính năng)</span>';
-      } else {
-        statusDiv.innerHTML = '<button onclick="openVipAuthModal()" class="text-[11px] text-slate-500 hover:text-slate-400 underline transition"><i class="fa-solid fa-key mr-1"></i>Đăng nhập VIP / Quản trị viên</button>';
-      }
-    }
-
-    function markStep(type) {
-      if (type === 'zalo') {
-        document.getElementById('zaloLabel').innerHTML = '✓ Đã tham gia Zalo';
-      } else if (type === 'tele') {
-        document.getElementById('teleLabel').innerHTML = '✓ Đã tham gia Tele';
-      }
-    }
-
-    function shareFacebook() {
-      const url = encodeURIComponent(window.location.origin);
-      window.open('https://www.facebook.com/sharer/sharer.php?u=' + url, '_blank', 'width=600,height=400');
-    }
-
-    function copyShareLink() {
-      const shareText = "Tải video Facebook Reels, TikTok không logo cực nhanh và nét tại: " + window.location.origin;
-      navigator.clipboard.writeText(shareText).then(() => {
-        document.getElementById('copyLabel').innerText = '✓ Đã chép link!';
-        setTimeout(() => {
-          document.getElementById('copyLabel').innerText = 'Copy link giới thiệu';
-        }, 3000);
-      });
-    }
-
-    async function submitUnlockForm() {
-      const name = document.getElementById('leadName').value.trim();
-      const phone = document.getElementById('leadPhone').value.trim();
-      const email = document.getElementById('leadEmail').value.trim();
-      const modalError = document.getElementById('modalError');
-
-      if (!name) {
-        modalError.innerText = 'Vui lòng nhập họ và tên của bạn!';
-        modalError.classList.remove('hidden');
-        return;
-      }
-
-      const cleanPhone = phone.replace(/\\D/g, '');
-      if (cleanPhone.length < 9) {
-        modalError.innerText = 'Vui lòng nhập số điện thoại / Zalo hợp lệ (tối thiểu 9 số)!';
-        modalError.classList.remove('hidden');
-        return;
-      }
-
-      modalError.classList.add('hidden');
-      const submitBtn = document.getElementById('modalSubmitBtn');
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang kích hoạt lượt tải...';
-
-      try {
-        const response = await fetch('/api/lead', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            name: name,
-            phone: phone,
-            email: email,
-            source: 'Web Unlock (Lead Gate)'
-          })
-        });
-
-        const data = await response.json();
-        if (response.ok && data.success) {
-          quota += (data.bonus || 5);
-          localStorage.setItem('dl_free_quota', quota.toString());
-          localStorage.setItem('lead_registered', 'true');
-          updateQuotaUI();
-          closeUnlockModal();
-
-          const statusBox = document.getElementById('statusBox');
-          statusBox.className = "block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-sm";
-          statusBox.innerHTML = '<i class="fa-solid fa-gift mr-1"></i> <b>Chúc mừng!</b> Bạn đã được mở khóa thêm ' + (data.bonus || 5) + ' lượt tải và quyền ưu tiên duyệt Bot VIP!';
-          
-          const currentUrl = document.getElementById('videoUrl').value.trim();
-          if (currentUrl) {
-            handleDownload();
-          }
-        } else {
-          modalError.innerText = data.error || 'Có lỗi xảy ra, vui lòng thử lại!';
-          modalError.classList.remove('hidden');
-        }
-      } catch (err) {
-        modalError.innerText = 'Lỗi kết nối máy chủ: ' + err.message;
-        modalError.classList.remove('hidden');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>✨ Hoàn tất & Mở khóa (+5 lượt tải)</span>';
-      }
-    }
-
-    // Nút Dán nhanh từ Clipboard
-    document.getElementById('pasteBtn').addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text) document.getElementById('videoUrl').value = text;
-      } catch (err) {
-        alert('Vui lòng cấp quyền dán cho trình duyệt.');
-      }
-    });
-
-    async function handleDownload() {
-      const urlInput = document.getElementById('videoUrl');
-      const url = urlInput.value.trim();
-      const statusBox = document.getElementById('statusBox');
-      const btn = document.getElementById('downloadBtn');
-      const previewCard = document.getElementById('previewCard');
-
-      if (!url) {
-        statusBox.className = "block bg-amber-500/10 border border-amber-500/20 text-amber-300 p-4 rounded-2xl text-sm";
-        statusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> Vui lòng nhập link video!';
-        return;
-      }
-
-      // Kiểm tra nếu là link YouTube và KHÔNG PHẢI VIP -> Thông báo đặc quyền VIP / Trả phí
-      const lowerUrl = url.toLowerCase();
-      if (!isVipUser && (lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be'))) {
-        statusBox.className = "block bg-amber-500/15 border border-amber-500/30 text-amber-200 p-5 rounded-2xl text-xs space-y-3";
-        statusBox.innerHTML = `
-          <div class="font-bold text-sm text-amber-300 flex items-center gap-2">
-            <i class="fa-solid fa-crown text-amber-400"></i> Tính năng Tải YouTube là Đặc quyền VIP
+      <!-- DESKTOP TITLE BAR (Dynamic for Windows 11 vs macOS) -->
+      <div class="os-titlebar flex items-center justify-between px-3 py-2 select-none">
+        
+        <!-- macOS Left Traffic Lights (Shown in mac-mode) -->
+        <div id="macTrafficLights" class="hidden items-center gap-2 pl-1">
+          <div class="mac-dot bg-[#ff5f56] border border-[#e0443e]" onclick="simulateMinMax('close')" title="Đóng">
+            <svg class="w-2 h-2 text-[#4c0000] opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </div>
-          <p class="text-slate-300 leading-relaxed text-xs">
-            Hiện tại trích xuất video YouTube chất lượng cao (1080p, 4K, Tách âm thanh) là tiện ích nâng cao dành riêng cho thành viên đã kích hoạt gói VIP.
-          </p>
-          <div class="pt-1 flex flex-wrap items-center gap-2">
-            <a href="__ZALO_GROUP_URL__" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition text-xs shadow-md shadow-blue-600/20">
-              <i class="fa-solid fa-comments"></i> Liên hệ Zalo kích hoạt
-            </a>
-            <button onclick="openUnlockModal()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium transition text-xs">
-              <i class="fa-solid fa-gift"></i> Đăng ký nhận ưu đãi
+          <div class="mac-dot bg-[#ffbd2e] border border-[#dea123]" onclick="simulateMinMax('min')" title="Thu nhỏ">
+            <svg class="w-2 h-2 text-[#5a3a00] opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12h14"/></svg>
+          </div>
+          <div class="mac-dot bg-[#27c93f] border border-[#1aab29]" onclick="simulateMinMax('max')" title="Phóng to">
+            <svg class="w-2 h-2 text-[#003800] opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+          </div>
+        </div>
+
+        <!-- Windows Left Window Icon & Title (Shown in win-mode) -->
+        <div id="winTitleInfo" class="flex items-center gap-2 text-xs text-slate-300 font-medium">
+          <i class="fa-solid fa-cloud-arrow-down text-indigo-400"></i>
+          <span>TAIO Studio v2.4 (x64) — Windows 11 Fluent Edition</span>
+        </div>
+
+        <!-- macOS Center App Title (Shown in mac-mode) -->
+        <div id="macCenterTitle" class="hidden items-center gap-1.5 text-xs text-slate-300 font-semibold tracking-wide">
+          <i class="fa-solid fa-lock text-[10px] text-emerald-400"></i>
+          <span>TAIO Studio — Video Downloader (Universal)</span>
+        </div>
+
+        <!-- Right Side: OS SWITCHER & WINDOWS CONTROLS -->
+        <div class="flex items-center gap-2">
+          
+          <!-- OS Switcher Toggle Button (Win 11 / Mac) -->
+          <div class="flex items-center bg-black/50 p-0.5 rounded-lg border border-white/10 text-xs">
+            <button id="btnSwitchWin" onclick="setOS('win')" class="flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-white bg-indigo-600/70 shadow-sm" title="Chuyển sang giao diện Windows 11">
+              <i class="fa-brands fa-windows text-sky-400"></i>
+              <span class="hidden sm:inline">Windows</span>
+            </button>
+            <button id="btnSwitchMac" onclick="setOS('mac')" class="flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-slate-400 hover:text-white" title="Chuyển sang giao diện macOS Cupertino">
+              <i class="fa-brands fa-apple text-slate-200"></i>
+              <span class="hidden sm:inline">macOS</span>
             </button>
           </div>
-          <div class="text-[11px] text-slate-400 border-t border-amber-500/20 pt-2 flex items-center gap-1">
-            <i class="fa-solid fa-circle-info text-sky-400"></i>
-            <span>Mẹo: Bạn vẫn có thể tải <b>miễn phí 100%</b> video từ <b>TikTok (không logo)</b> và <b>Facebook Reels</b>!</span>
+
+          <!-- Windows 11 Right Action Controls (Min, Max, Close) -->
+          <div id="winRightControls" class="flex items-center -mr-3 -my-2">
+            <button class="win-control-btn" onclick="simulateMinMax('min')" title="Thu nhỏ">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+            </button>
+            <button class="win-control-btn" onclick="simulateMinMax('max')" title="Phóng to / Thu lại">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
+            <button class="win-control-btn win-close-btn" onclick="simulateMinMax('close')" title="Đóng">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
-        `;
+
+        </div>
+
+      </div>
+
+      <!-- DESKTOP MENU BAR (Windows 11 / macOS Toolbar) -->
+      <div id="osMenuBar" class="flex items-center justify-between px-4 py-1.5 text-xs bg-slate-900/60 border-b border-white/5 text-slate-400">
+        <div class="flex items-center gap-4">
+          <div class="relative group cursor-pointer hover:text-white transition">
+            <span>Tệp (File)</span>
+            <div class="hidden group-hover:block absolute left-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 z-50 text-xs">
+              <button onclick="pasteFromClipboard()" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center justify-between">
+                <span>Dán URL</span><span class="text-slate-400">Ctrl+V</span>
+              </button>
+              <button onclick="clearInput()" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center justify-between">
+                <span>Xóa ô nhập</span><span class="text-slate-400">Esc</span>
+              </button>
+              <div class="border-t border-slate-700/60 my-1"></div>
+              <button onclick="location.reload()" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center justify-between">
+                <span>Làm mới app</span><span class="text-slate-400">F5</span>
+              </button>
+            </div>
+          </div>
+          <div class="relative group cursor-pointer hover:text-white transition">
+            <span>Công cụ</span>
+            <div class="hidden group-hover:block absolute left-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 z-50 text-xs">
+              <button onclick="openVipModal()" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center gap-2">
+                <i class="fa-solid fa-crown text-amber-400"></i>
+                <span>Xác thực Admin / VIP</span>
+              </button>
+              <button onclick="openUnlockModal()" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center gap-2">
+                <i class="fa-solid fa-gift text-pink-400"></i>
+                <span>Nhận thêm lượt tải</span>
+              </button>
+            </div>
+          </div>
+          <div class="relative group cursor-pointer hover:text-white transition">
+            <span>Nền tảng</span>
+            <div class="hidden group-hover:block absolute left-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 z-50 text-xs">
+              <button onclick="switchPlatform('tiktok')" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center gap-2">
+                <i class="fa-brands fa-tiktok text-cyan-400"></i>
+                <span>TikTok (Không Logo)</span>
+              </button>
+              <button onclick="switchPlatform('facebook')" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center gap-2">
+                <i class="fa-brands fa-facebook text-blue-400"></i>
+                <span>Facebook Reels</span>
+              </button>
+              <button onclick="switchPlatform('youtube')" class="w-full text-left px-3 py-1.5 hover:bg-slate-700/80 flex items-center gap-2">
+                <i class="fa-brands fa-youtube text-red-400"></i>
+                <span>YouTube (VIP)</span>
+              </button>
+            </div>
+          </div>
+          <a href="__TELEGRAM_BOT_URL__" target="_blank" class="hover:text-white transition">
+            Bot Telegram
+          </a>
+        </div>
+        <div class="flex items-center gap-3 text-[11px]">
+          <span id="vipBadgeTop" class="hidden items-center gap-1 text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+            <i class="fa-solid fa-crown"></i> VIP ADMIN
+          </span>
+          <span class="text-slate-400 font-mono">IP: <span id="clientIpDisplay">__CLIENT_IP__</span></span>
+        </div>
+      </div>
+
+      <!-- WINDOW BODY CONTENT -->
+      <div id="windowBodyContent" class="p-4 sm:p-7 space-y-6">
+
+        <!-- 1. SPOTLIGHT CARD: TIKTOK KHÔNG LOGO (BẮT MẮT) -->
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-950/60 via-slate-900/80 to-pink-950/60 border border-cyan-500/30 p-4 sm:p-5 glow-effect">
+          <div class="absolute -right-6 -bottom-6 w-36 h-36 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="absolute -left-6 -top-6 w-36 h-36 bg-pink-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+          <div class="relative z-10 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-xs font-bold tracking-wide">
+                <i class="fa-solid fa-bolt text-yellow-400 animate-pulse"></i>
+                <span>TÍNH NĂNG TÂM ĐIỂM CỦA STUDIO</span>
+              </div>
+              <span class="text-xs text-slate-300 font-medium">Bóc Tách CDN Trực Tiếp &bull; Cập nhật 2026</span>
+            </div>
+
+            <div class="space-y-1">
+              <h2 class="text-lg sm:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-pink-300">
+                Tải TikTok Không Logo Siêu Tốc (0.5s) &bull; Chuẩn 4K / HD
+              </h2>
+              <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Hệ thống tự động phân tích luồng phát gốc từ CDN máy chủ TikTok. Xóa sạch <span class="text-pink-300 font-semibold">100% Logo & ID nhảy góc</span>, hỗ trợ tải trọn bộ <span class="text-cyan-300 font-semibold">Album ảnh lướt (Slideshow)</span> kèm trọn vẹn file nhạc MP3 chất lượng 320kbps!
+              </p>
+            </div>
+
+            <!-- 4 Spotlight Feature Pills -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+              <div class="flex items-center gap-2 bg-slate-950/60 border border-white/10 rounded-xl p-2.5">
+                <i class="fa-solid fa-gauge-high text-cyan-400 text-base"></i>
+                <div>
+                  <div class="font-bold text-white">0.5s CDN</div>
+                  <div class="text-[10px] text-slate-400">Tốc độ tức thì</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 bg-slate-950/60 border border-white/10 rounded-xl p-2.5">
+                <i class="fa-solid fa-wand-magic-sparkles text-pink-400 text-base"></i>
+                <div>
+                  <div class="font-bold text-white">100% Sạch Logo</div>
+                  <div class="text-[10px] text-slate-400">Không dính watermark</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 bg-slate-950/60 border border-white/10 rounded-xl p-2.5">
+                <i class="fa-solid fa-images text-indigo-400 text-base"></i>
+                <div>
+                  <div class="font-bold text-white">Full Album Ảnh</div>
+                  <div class="text-[10px] text-slate-400">Hỗ trợ Slideshow</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 bg-slate-950/60 border border-white/10 rounded-xl p-2.5">
+                <i class="fa-solid fa-music text-emerald-400 text-base"></i>
+                <div>
+                  <div class="font-bold text-white">Nhạc Gốc 320k</div>
+                  <div class="text-[10px] text-slate-400">Âm thanh chuẩn phòng thu</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. PLATFORM TABS (ORDER: TIKTOK -> FB REELS -> YOUTUBE) -->
+        <div class="space-y-2">
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Chọn Nền Tảng Video:
+          </label>
+          <div class="grid grid-cols-3 gap-2 sm:gap-3">
+            
+            <!-- 1. TIKTOK TAB (DEFAULT) -->
+            <button id="tabTiktok" onclick="switchPlatform('tiktok')" class="group relative flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-cyan-500/50 bg-gradient-to-b from-cyan-500/20 to-slate-900 text-white font-semibold text-xs sm:text-sm shadow-md transition-all">
+              <i class="fa-brands fa-tiktok text-cyan-400 text-base group-hover:scale-110 transition"></i>
+              <span>TikTok <span class="hidden sm:inline text-cyan-300 text-[11px] font-normal">(Không logo)</span></span>
+              <span class="absolute -top-1.5 -right-1 px-1.5 py-0.2 bg-cyan-500 text-slate-950 text-[9px] font-extrabold rounded-full uppercase">Ưu tiên</span>
+            </button>
+
+            <!-- 2. FACEBOOK REELS TAB -->
+            <button id="tabFacebook" onclick="switchPlatform('facebook')" class="group flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-slate-300 hover:text-white hover:border-blue-500/40 font-semibold text-xs sm:text-sm transition-all">
+              <i class="fa-brands fa-facebook text-blue-400 text-base group-hover:scale-110 transition"></i>
+              <span>FB Reels</span>
+            </button>
+
+            <!-- 3. YOUTUBE TAB -->
+            <button id="tabYoutube" onclick="switchPlatform('youtube')" class="group relative flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-slate-300 hover:text-white hover:border-red-500/40 font-semibold text-xs sm:text-sm transition-all">
+              <i class="fa-brands fa-youtube text-red-500 text-base group-hover:scale-110 transition"></i>
+              <span>YouTube <span class="text-amber-400 text-[10px] font-bold">(VIP)</span></span>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- 3. QUOTA / VIP STATUS BAR -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/70 border border-white/5 text-xs">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-gift text-pink-400 text-sm"></i>
+            <span class="text-slate-300">Lượt tải miễn phí hôm nay:</span>
+            <span id="quotaCountBadge" class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+              3 lượt
+            </span>
+          </div>
+          <button onclick="openUnlockModal()" class="text-indigo-400 hover:text-indigo-300 font-semibold transition flex items-center gap-1">
+            <span>Nhận thêm lượt tải</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </button>
+        </div>
+
+        <!-- 4. URL INPUT & DOWNLOAD FORM -->
+        <div class="space-y-3">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <i id="inputPlatformIcon" class="fa-solid fa-link text-indigo-400"></i>
+            </div>
+            <input 
+              type="text" 
+              id="videoUrl" 
+              placeholder="Dán link video TikTok cần tải không logo (https://vt.tiktok.com/...)" 
+              class="w-full pl-10 pr-24 py-3.5 bg-slate-950/80 border border-white/15 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 rounded-xl text-sm text-white placeholder-slate-500 transition outline-none"
+            >
+            <button 
+              type="button" 
+              onclick="pasteFromClipboard()" 
+              class="absolute inset-y-1.5 right-1.5 px-3.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg border border-white/10 transition flex items-center gap-1.5"
+            >
+              <i class="fa-regular fa-paste"></i>
+              <span>Dán</span>
+            </button>
+          </div>
+
+          <!-- Download Action Button -->
+          <button 
+            id="downloadBtn" 
+            onclick="handleDownload()" 
+            class="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.99] text-white font-bold text-sm sm:text-base shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+          >
+            <i class="fa-solid fa-cloud-arrow-down text-lg"></i>
+            <span>Bắt Đầu Tải Video Ngay</span>
+          </button>
+        </div>
+
+        <!-- 5. DOWNLOAD PROGRESS / STATUS NOTIFICATION -->
+        <div id="statusBox" class="hidden p-4 rounded-xl text-sm transition-all duration-300"></div>
+
+        <!-- 6. VIDEO PREVIEW & RESULT CARD -->
+        <div id="resultCard" class="hidden p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-indigo-500/30 space-y-4">
+          <div class="flex items-start gap-4">
+            <img id="resultThumb" src="" alt="Thumbnail" class="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover bg-slate-950 border border-white/10 shadow-md">
+            <div class="space-y-1.5 flex-1 min-w-0">
+              <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <i class="fa-solid fa-circle-check"></i> Trích Xuất Thành Công
+              </span>
+              <h3 id="resultTitle" class="text-sm sm:text-base font-bold text-white truncate">Tiêu đề video</h3>
+              <p id="resultUploader" class="text-xs text-slate-400">Tác giả: Đang cập nhật</p>
+              <div class="flex items-center gap-2 pt-1">
+                <a id="resultDownloadLink" href="#" download class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition">
+                  <i class="fa-solid fa-download"></i>
+                  <span>Lưu về thiết bị</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. TELEGRAM BOT VIP CALLOUT -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-sky-950/40 via-slate-900/60 to-slate-900/80 border border-sky-500/20">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 text-lg">
+              <i class="fa-brands fa-telegram"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white text-sm">Bot Telegram Trợ Lý 24/7</span>
+                <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">VIP CLOUD</span>
+              </div>
+              <p class="text-xs text-slate-400">Tải không giới hạn, hỗ trợ YouTube & TikTok chất lượng gốc</p>
+            </div>
+          </div>
+          <a href="__TELEGRAM_BOT_URL__" target="_blank" class="w-full sm:w-auto text-center px-4 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-md transition">
+            Mở Telegram Bot
+          </a>
+        </div>
+
+      </div>
+
+      <!-- DESKTOP STATUS BAR (Windows 11 / macOS Bottom Frame) -->
+      <div id="osStatusBar" class="flex items-center justify-between px-4 py-2 text-[11px] bg-slate-950/80 border-t border-white/5 text-slate-400 select-none">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1.5 text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span id="osStatusText">Sẵn sàng</span>
+          </span>
+          <span class="hidden sm:inline text-slate-500">|</span>
+          <span class="hidden sm:inline">Động cơ: TikCDN v4 + yt-dlp</span>
+        </div>
+        <div class="flex items-center gap-3 font-mono text-[10px]">
+          <span class="hidden sm:inline">RAM: 64MB / 512MB</span>
+          <span class="hidden sm:inline text-slate-500">&bull;</span>
+          <span id="osSystemLabel">Windows 11 Fluent</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="w-full max-w-4xl mx-auto text-center py-2 text-xs text-slate-500">
+    <p>TAIO.Club Universal Studio &bull; Hỗ trợ iOS, Android, macOS & Windows &bull; Bản quyền 2026</p>
+  </footer>
+
+  <!-- MODAL: NHẬN THÊM LƯỢT TẢI (LEAD GATE) -->
+  <div id="unlockModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="relative w-full max-w-md rounded-2xl bg-slate-900 border border-indigo-500/30 p-6 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 mx-auto rounded-full bg-pink-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 text-xl">
+          <i class="fa-solid fa-gift"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Nhận Thêm 10 Lượt Tải Miễn Phí!</h3>
+        <p class="text-xs text-slate-400">Nhập số điện thoại Zalo của bạn để hệ thống cấp thêm lượt tải ngay lập tức</p>
+      </div>
+
+      <div class="space-y-3">
+        <input 
+          type="tel" 
+          id="leadPhone" 
+          placeholder="Số điện thoại Zalo của bạn (VD: 0912345678)" 
+          class="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500"
+        >
+        <button 
+          onclick="submitLeadPhone()" 
+          class="w-full py-3 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl transition"
+        >
+          Xác Nhận & Mở Khóa Lượt Tải
+        </button>
+      </div>
+
+      <div class="pt-2 text-center">
+        <button onclick="closeUnlockModal()" class="text-xs text-slate-400 hover:text-white transition">
+          Để sau, tôi sẽ tiếp tục
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: XÁC THỰC ADMIN / VIP -->
+  <div id="vipAuthModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="relative w-full max-w-md rounded-2xl bg-slate-900 border border-amber-500/30 p-6 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 mx-auto rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl">
+          <i class="fa-solid fa-crown"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Xác Thực Quản Trị / Gói VIP</h3>
+        <p class="text-xs text-slate-400">Nhập mã Token Admin hoặc tài khoản VIP để mở khóa tải YouTube & không giới hạn lượt</p>
+      </div>
+
+      <div class="space-y-3">
+        <input 
+          type="text" 
+          id="vipTokenInput" 
+          placeholder="Nhập Token Admin hoặc mã bí mật" 
+          class="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-sm text-white placeholder-slate-500 outline-none focus:border-amber-500"
+        >
+        <button 
+          onclick="submitVipToken()" 
+          class="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold text-sm rounded-xl transition"
+        >
+          Xác Thực Ngay
+        </button>
+      </div>
+
+      <div class="pt-2 text-center">
+        <button onclick="closeVipModal()" class="text-xs text-slate-400 hover:text-white transition">
+          Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // 1. Quản lý Theme Desktop OS (Windows 11 vs macOS)
+    let currentOS = localStorage.getItem('taio_desktop_os') || 'win';
+    const osBody = document.getElementById('osBody');
+    const macTrafficLights = document.getElementById('macTrafficLights');
+    const winTitleInfo = document.getElementById('winTitleInfo');
+    const macCenterTitle = document.getElementById('macCenterTitle');
+    const winRightControls = document.getElementById('winRightControls');
+    const btnSwitchWin = document.getElementById('btnSwitchWin');
+    const btnSwitchMac = document.getElementById('btnSwitchMac');
+    const osSystemLabel = document.getElementById('osSystemLabel');
+
+    function applyOSTheme() {
+      if (currentOS === 'mac') {
+        osBody.classList.remove('win-mode');
+        osBody.classList.add('mac-mode');
+
+        macTrafficLights.classList.remove('hidden');
+        macTrafficLights.classList.add('flex');
+        macCenterTitle.classList.remove('hidden');
+        macCenterTitle.classList.add('flex');
+
+        winTitleInfo.classList.add('hidden');
+        winRightControls.classList.add('hidden');
+
+        btnSwitchMac.className = "flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-white bg-indigo-600/70 shadow-sm";
+        btnSwitchWin.className = "flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-slate-400 hover:text-white";
+
+        osSystemLabel.innerText = "macOS Sequoia 15.1 Glass";
+      } else {
+        osBody.classList.remove('mac-mode');
+        osBody.classList.add('win-mode');
+
+        macTrafficLights.classList.add('hidden');
+        macTrafficLights.classList.remove('flex');
+        macCenterTitle.classList.add('hidden');
+        macCenterTitle.classList.remove('flex');
+
+        winTitleInfo.classList.remove('hidden');
+        winRightControls.classList.remove('hidden');
+
+        btnSwitchWin.className = "flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-white bg-indigo-600/70 shadow-sm";
+        btnSwitchMac.className = "flex items-center gap-1 px-2.5 py-1 rounded-md transition font-medium text-slate-400 hover:text-white";
+
+        osSystemLabel.innerText = "Windows 11 Fluent Edition";
+      }
+    }
+
+    function setOS(os) {
+      currentOS = os;
+      localStorage.setItem('taio_desktop_os', os);
+      applyOSTheme();
+    }
+    applyOSTheme();
+
+    // 2. Mô phỏng cửa sổ Desktop (Min/Max/Close)
+    let isMaximized = false;
+    let isMinimized = false;
+    function simulateMinMax(action) {
+      const win = document.getElementById('desktopWindow');
+      const body = document.getElementById('windowBodyContent');
+      const menu = document.getElementById('osMenuBar');
+      if (action === 'min') {
+        isMinimized = !isMinimized;
+        body.style.display = isMinimized ? 'none' : 'block';
+        menu.style.display = isMinimized ? 'none' : 'flex';
+      } else if (action === 'max') {
+        isMaximized = !isMaximized;
+        if (isMaximized) {
+          win.style.maxWidth = '100%';
+          document.querySelector('main').style.maxWidth = '100%';
+        } else {
+          win.style.maxWidth = '';
+          document.querySelector('main').style.maxWidth = '';
+        }
+      } else if (action === 'close') {
+        alert('Cửa sổ ứng dụng TAIO Studio đang chạy ngầm trong khay hệ thống!');
+      }
+    }
+
+    // 3. Phân Quyền & Quota
+    const isAdminUser = __IS_ADMIN_VIP__;
+    const serverAdminToken = "__ADMIN_TOKEN__";
+    if (isAdminUser && serverAdminToken) {
+      localStorage.setItem('taio_vip_token', serverAdminToken);
+    }
+    let quota = parseInt(localStorage.getItem('taio_quota') ?? '3', 10);
+
+    function updateQuotaDisplay() {
+      const badge = document.getElementById('quotaCountBadge');
+      const vipTop = document.getElementById('vipBadgeTop');
+      if (isAdminUser || localStorage.getItem('taio_vip_token')) {
+        badge.innerHTML = '<i class="fa-solid fa-infinity"></i> VIP Vô hạn';
+        badge.className = "px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30";
+        vipTop.classList.remove('hidden');
+        vipTop.classList.add('inline-flex');
+      } else {
+        badge.innerText = quota + " lượt";
+      }
+    }
+    updateQuotaDisplay();
+
+    // 4. Chọn Tab Nền Tảng (Order: TikTok -> Facebook -> YouTube)
+    let activePlatform = 'tiktok';
+    const tabTiktok = document.getElementById('tabTiktok');
+    const tabFacebook = document.getElementById('tabFacebook');
+    const tabYoutube = document.getElementById('tabYoutube');
+    const videoUrlInput = document.getElementById('videoUrl');
+    const inputPlatformIcon = document.getElementById('inputPlatformIcon');
+
+    function switchPlatform(p) {
+      activePlatform = p;
+      // Reset all tab styling
+      [tabTiktok, tabFacebook, tabYoutube].forEach(t => {
+        t.className = "group flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-white/10 bg-slate-900/60 text-slate-300 hover:text-white font-semibold text-xs sm:text-sm transition-all";
+      });
+
+      if (p === 'tiktok') {
+        tabTiktok.className = "group relative flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-cyan-500/50 bg-gradient-to-b from-cyan-500/20 to-slate-900 text-white font-semibold text-xs sm:text-sm shadow-md transition-all";
+        videoUrlInput.placeholder = "Dán link video TikTok cần tải không logo (https://vt.tiktok.com/...)";
+        inputPlatformIcon.className = "fa-brands fa-tiktok text-cyan-400";
+      } else if (p === 'facebook') {
+        tabFacebook.className = "group flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-blue-500/50 bg-gradient-to-b from-blue-500/20 to-slate-900 text-white font-semibold text-xs sm:text-sm shadow-md transition-all";
+        videoUrlInput.placeholder = "Dán link Facebook Reels hoặc Video (https://www.facebook.com/reel/...)";
+        inputPlatformIcon.className = "fa-brands fa-facebook text-blue-400";
+      } else if (p === 'youtube') {
+        tabYoutube.className = "group relative flex items-center justify-center gap-2 py-3 px-3 rounded-xl border border-red-500/50 bg-gradient-to-b from-red-500/20 to-slate-900 text-white font-semibold text-xs sm:text-sm shadow-md transition-all";
+        videoUrlInput.placeholder = "Dán link YouTube hoặc Shorts (https://youtu.be/... hoặc youtube.com)";
+        inputPlatformIcon.className = "fa-brands fa-youtube text-red-500";
+      }
+    }
+
+    // 5. Thao Tác Input: Paste & Clear
+    async function pasteFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          videoUrlInput.value = text.trim();
+          autoDetectPlatform(text);
+        }
+      } catch (err) {
+        videoUrlInput.focus();
+      }
+    }
+
+    function clearInput() {
+      videoUrlInput.value = '';
+      videoUrlInput.focus();
+    }
+
+    function autoDetectPlatform(url) {
+      if (url.includes('tiktok.com')) switchPlatform('tiktok');
+      else if (url.includes('facebook.com') || url.includes('fb.watch')) switchPlatform('facebook');
+      else if (url.includes('youtube.com') || url.includes('youtu.be')) switchPlatform('youtube');
+    }
+
+    videoUrlInput.addEventListener('input', (e) => {
+      autoDetectPlatform(e.target.value);
+    });
+
+    videoUrlInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleDownload();
+    });
+
+    // 6. XỬ LÝ TẢI VIDEO & CALL BACKEND
+    async function handleDownload() {
+      const url = videoUrlInput.value.trim();
+      const statusBox = document.getElementById('statusBox');
+      const resultCard = document.getElementById('resultCard');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const osStatusText = document.getElementById('osStatusText');
+
+      if (!url) {
+        statusBox.className = "p-4 rounded-xl text-sm bg-rose-500/15 border border-rose-500/30 text-rose-300 block";
+        statusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Vui lòng dán link video cần tải vào ô trên!';
         return;
       }
 
-      // Kiểm tra Quota (chỉ áp dụng cho người dùng thông thường)
-      if (!isVipUser && quota <= 0) {
+      // Kiểm tra quota nếu không phải VIP
+      const isVip = isAdminUser || localStorage.getItem('taio_vip_token');
+      if (!isVip && quota <= 0) {
         openUnlockModal();
         return;
       }
 
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Đang xử lý & tải từ nguồn...</span>';
-      statusBox.className = "block bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 p-4 rounded-2xl text-sm";
-      statusBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Hệ thống đang trích xuất luồng video tốt nhất. Quá trình này mất khoảng 5 - 20 giây...';
-      previewCard.classList.add('hidden');
+      // Bắt đầu tải
+      downloadBtn.disabled = true;
+      downloadBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Đang kết nối CDN & phân tích dữ liệu...</span>';
+      statusBox.className = "p-4 rounded-xl text-sm bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 block";
+      statusBox.innerHTML = '<i class="fa-solid fa-bolt fa-bounce text-amber-400 mr-1.5"></i> Đang bóc tách video trực tiếp từ máy chủ CDN. Vui lòng đợi trong giây lát...';
+      osStatusText.innerText = "Đang tải...";
+      resultCard.classList.add('hidden');
 
       try {
-        const response = await fetch('/api/download', {
+        const payload = {
+          url: url,
+          vip_token: localStorage.getItem('taio_vip_token') || ''
+        };
+
+        const res = await fetch('/api/download', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Admin-Token': localToken || ''
-          },
-          body: JSON.stringify({ 
-            url: url,
-            admin_token: localToken || ''
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const data = await res.json();
 
-        if (response.ok && data.success) {
-          // Chỉ trừ lượt nếu là người dùng thông thường
-          if (!isVipUser) {
+        if (res.ok && data.success) {
+          // Trừ quota nếu người dùng thường
+          if (!isVip) {
             quota = Math.max(0, quota - 1);
-            localStorage.setItem('dl_free_quota', quota.toString());
-            updateQuotaUI();
+            localStorage.setItem('taio_quota', quota.toString());
+            updateQuotaDisplay();
           }
 
-          statusBox.className = "block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 p-4 rounded-2xl text-sm";
-          statusBox.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Tải và chuẩn hóa video thành công!';
-          
-          previewCard.classList.remove('hidden');
-          document.getElementById('videoTitle').innerText = data.title || "Video";
-          document.getElementById('videoAuthor').innerText = "Kênh / Tác giả: " + (data.uploader || "N/A");
+          statusBox.className = "p-4 rounded-xl text-sm bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 block";
+          statusBox.innerHTML = '<i class="fa-solid fa-circle-check mr-1.5"></i> Trích xuất video thành công! Đang kích hoạt lưu file...';
+          osStatusText.innerText = "Hoàn tất!";
+
+          // Hiển thị Result Card
+          document.getElementById('resultTitle').innerText = data.title || data.filename;
+          document.getElementById('resultUploader').innerText = "Tác giả: " + (data.uploader || "Đã trích xuất");
           if (data.thumbnail) {
-            document.getElementById('thumbImg').src = data.thumbnail;
+            document.getElementById('resultThumb').src = data.thumbnail;
           } else {
-            document.getElementById('thumbImg').src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&q=80";
+            document.getElementById('resultThumb').src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='%231e293b'/><text x='50%' y='50%' fill='%2394a3b8' font-size='12' text-anchor='middle' dy='.3em'>Video HD</text></svg>";
           }
-          
-          const saveBtn = document.getElementById('saveFileBtn');
-          saveBtn.href = '/api/file/' + encodeURIComponent(data.filename);
-          saveBtn.setAttribute('download', data.filename);
-          
-          // Kích hoạt lưu ngầm trực tiếp không chuyển trang gây lỗi 502
-          const autoDownloadLink = document.createElement('a');
-          autoDownloadLink.href = saveBtn.href;
-          autoDownloadLink.setAttribute('download', data.filename);
-          document.body.appendChild(autoDownloadLink);
-          autoDownloadLink.click();
-          document.body.removeChild(autoDownloadLink);
 
-          // Nếu hết lượt sau lần tải này, hiển thị nhắc mở khóa sau 2.5 giây
-          if (!isVipUser && quota === 0) {
-            setTimeout(() => {
-              openUnlockModal();
-            }, 2500);
-          }
+          const fileUrl = '/downloads/' + encodeURIComponent(data.filename);
+          const dlBtn = document.getElementById('resultDownloadLink');
+          dlBtn.href = fileUrl;
+          dlBtn.setAttribute('download', data.filename);
+          resultCard.classList.remove('hidden');
+
+          // Tự động kích hoạt tải xuống
+          const autoLink = document.createElement('a');
+          autoLink.href = fileUrl;
+          autoLink.setAttribute('download', data.filename);
+          document.body.appendChild(autoLink);
+          autoLink.click();
+          document.body.removeChild(autoLink);
+
         } else {
-          statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
-          statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
+          // Hiển thị lỗi từ backend
+          const errorMsg = data.error || 'Không tải được video. Vui lòng kiểm tra lại link.';
+          statusBox.className = "p-4 rounded-xl text-sm bg-rose-500/15 border border-rose-500/30 text-rose-300 block";
+          statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1.5"></i> ' + errorMsg;
+          osStatusText.innerText = "Có lỗi xảy ra";
         }
       } catch (err) {
-        statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
-        statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi kết nối: ' + err.message;
+        statusBox.className = "p-4 rounded-xl text-sm bg-rose-500/15 border border-rose-500/30 text-rose-300 block";
+        statusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Lỗi kết nối máy chủ: ' + err.message;
+        osStatusText.innerText = "Lỗi kết nối";
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Tải video khác</span>';
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-lg"></i> <span>Tải Video Khác</span>';
       }
     }
+
+    // 7. Modals: Unlock Lead & VIP Auth
+    function openUnlockModal() {
+      document.getElementById('unlockModal').classList.remove('hidden');
+    }
+    function closeUnlockModal() {
+      document.getElementById('unlockModal').classList.add('hidden');
+    }
+    async function submitLeadPhone() {
+      const phone = document.getElementById('leadPhone').value.trim();
+      if (!phone || phone.length < 9) {
+        alert('Vui lòng nhập số điện thoại hợp lệ!');
+        return;
+      }
+      try {
+        await fetch('/api/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: phone })
+        });
+      } catch (e) {}
+
+      quota += 10;
+      localStorage.setItem('taio_quota', quota.toString());
+      updateQuotaDisplay();
+      closeUnlockModal();
+      alert('Tuyệt vời! Bạn đã được cộng thêm 10 lượt tải video miễn phí!');
+    }
+
+    function openVipModal() {
+      document.getElementById('vipAuthModal').classList.remove('hidden');
+    }
+    function closeVipModal() {
+      document.getElementById('vipAuthModal').classList.add('hidden');
+    }
+    async function submitVipToken() {
+      const token = document.getElementById('vipTokenInput').value.trim();
+      if (!token) return;
+      try {
+        const res = await fetch('/api/auth/vip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: token })
+        });
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem('taio_vip_token', token);
+          alert('Xác thực VIP Admin thành công! Đã kích hoạt đặc quyền tải không giới hạn.');
+          location.reload();
         } else {
-          statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
-          statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi: ' + (data.error || 'Không tải được video');
+          alert('Mã Token không hợp lệ. Vui lòng kiểm tra lại!');
         }
-      } catch (err) {
-        statusBox.className = "block bg-rose-500/10 border border-rose-500/20 text-rose-300 p-4 rounded-2xl text-sm";
-        statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1"></i> Lỗi kết nối: ' + err.message;
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-download"></i> <span>Tải video khác</span>';
+      } catch (e) {
+        alert('Lỗi xác thực: ' + e.message);
       }
     }
   </script>
@@ -1232,10 +1508,19 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 threading.Thread(target=cleanup_old_files, daemon=True).start()
 
             except Exception as e:
+                err_str = str(e)
+                if "Sign in to confirm you're not a bot" in err_str or "confirm you're not a bot" in err_str:
+                    friendly_err = (
+                        "⚠️ YouTube Cloud Bot-Guard: YouTube đang tạm khóa IP Cloud Render yêu cầu xác thực Bot/Cookies. "
+                        "Bạn có thể dán link này vào Bot Telegram VIP để tải trực tiếp hoặc liên hệ Admin qua Zalo để cấp Cookie VIP!"
+                    )
+                else:
+                    friendly_err = err_str
+
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+                self.wfile.write(json.dumps({"success": False, "error": friendly_err}).encode('utf-8'))
             finally:
                 if ticket:
                     download_queue.release_slot(ticket)
