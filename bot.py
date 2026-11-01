@@ -536,7 +536,7 @@ HTML_PAGE = """<!DOCTYPE html>
   <!-- TOP HEADER / BRAND BAR -->
   <header class="w-full max-w-3xl mx-auto flex items-center justify-between py-2 px-1 text-xs text-slate-600">
     <!-- TAIO Brand Logo -->
-    <div class="flex items-center gap-2.5">
+    <div class="flex items-center gap-2.5 cursor-pointer select-none" onclick="handleLogoClick()">
       <div class="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm">
         <i class="fa-solid fa-cloud-arrow-down text-sm"></i>
       </div>
@@ -627,6 +627,14 @@ HTML_PAGE = """<!DOCTYPE html>
 
       <!-- WINDOW BODY CONTENT (GỌN GÀNG, THOÁNG ĐÃNG) -->
       <div id="windowBodyContent" class="p-4 sm:p-6 space-y-5">
+
+        <!-- THÔNG BÁO BẢN QUYỀN & LƯU TRỮ CÁ NHÂN Ở ĐẦU APP -->
+        <div class="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/90 border border-amber-200/80 text-amber-900 text-xs leading-relaxed">
+          <i class="fa-solid fa-circle-info text-amber-600 mt-0.5 flex-shrink-0"></i>
+          <div>
+            TAIO Studio chỉ hỗ trợ lưu trữ cá nhân. Bản quyền nội dung thuộc về tác giả gốc. Người dùng tự chịu trách nhiệm khi đăng lại hoặc sử dụng cho mục đích thương mại.
+          </div>
+        </div>
 
         <!-- 1. SPOTLIGHT GỌN GÀNG: TẢI TIKTOK KHÔNG LOGO -->
         <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2.5">
@@ -787,8 +795,8 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
         <div class="flex items-center gap-2 text-[11px] text-slate-400">
           <span id="osSystemLabel">Windows Edition</span>
-          <span>&bull;</span>
-          <span class="cursor-pointer hover:text-slate-600" onclick="openVipModal()">Quản trị VIP</span>
+          <span id="vipFooterDivider" class="hidden">&bull;</span>
+          <span id="vipFooterLink" class="hidden cursor-pointer hover:text-slate-600" onclick="openVipModal()">Quản trị VIP</span>
         </div>
       </div>
 
@@ -863,6 +871,43 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="pt-1 text-center">
         <button onclick="closeVipModal()" class="text-xs text-slate-500 hover:text-slate-800 transition">
           Đóng cửa sổ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ĐIỀU KHOẢN SỬ DỤNG LẦN ĐẦU (FIRST-TIME DISCLAIMER) -->
+  <div id="termsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div class="relative w-full max-w-lg rounded-xl bg-white border border-slate-200 p-5 sm:p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
+        <div class="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 text-lg flex-shrink-0">
+          <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Điều Khoản & Miễn Trừ Trách Nhiệm</h3>
+          <p class="text-xs text-slate-500">Vui lòng đọc và xác nhận trước khi tiếp tục</p>
+        </div>
+      </div>
+
+      <div class="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed max-h-56 overflow-y-auto space-y-2">
+        <p>
+          TAIO Studio là công cụ hỗ trợ sao lưu video cho mục đích cá nhân, không thương mại. Mọi quyền tác giả thuộc về người sáng tạo và chủ sở hữu nội dung gốc. Việc đăng tải lại, chỉnh sửa hoặc khai thác thương mại cần có sự cho phép của chủ sở hữu. Người dùng hoàn toàn chịu trách nhiệm pháp lý về cách sử dụng nội dung đã tải. Nếu bạn là chủ sở hữu và có yêu cầu, vui lòng liên hệ <a href="__ZALO_GROUP_URL__" target="_blank" class="text-blue-600 underline font-medium">Zalo hỗ trợ</a> để được hỗ trợ.
+        </p>
+      </div>
+
+      <div class="space-y-3 pt-1">
+        <label class="flex items-center gap-2.5 cursor-pointer select-none text-xs sm:text-sm font-medium text-slate-800">
+          <input type="checkbox" id="termsCheckbox" onchange="onTermsCheckboxChange()" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+          <span>Tôi đã đọc và đồng ý</span>
+        </label>
+
+        <button 
+          id="termsAgreeBtn" 
+          disabled 
+          onclick="acceptTerms()" 
+          class="w-full py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-sm transition opacity-50 cursor-not-allowed"
+        >
+          Tiếp Tục Sử Dụng
         </button>
       </div>
     </div>
@@ -955,14 +1000,28 @@ HTML_PAGE = """<!DOCTYPE html>
     }
     let quota = parseInt(localStorage.getItem('taio_quota') ?? '3', 10);
 
+    let logoClicks = 0;
+    function handleLogoClick() {
+      logoClicks++;
+      if (logoClicks >= 3) {
+        logoClicks = 0;
+        openVipModal();
+      }
+    }
+
     function updateQuotaDisplay() {
       const badge = document.getElementById('quotaCountBadge');
       const vipTop = document.getElementById('vipBadgeTop');
+      const vLink = document.getElementById('vipFooterLink');
+      const vDivider = document.getElementById('vipFooterDivider');
+
       if (isAdminUser || localStorage.getItem('taio_vip_token')) {
         badge.innerHTML = '<i class="fa-solid fa-infinity text-emerald-600"></i> VIP Vô hạn';
         badge.className = "px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200";
         vipTop.classList.remove('hidden');
         vipTop.classList.add('inline-flex');
+        if (vLink) vLink.classList.remove('hidden');
+        if (vDivider) vDivider.classList.remove('hidden');
       } else {
         badge.innerText = quota + " lượt";
       }
@@ -1176,6 +1235,35 @@ HTML_PAGE = """<!DOCTYPE html>
         alert('Lỗi xác thực: ' + e.message);
       }
     }
+
+    // 8. Quản lý Điều khoản Lần đầu Sử dụng
+    function checkFirstTimeTerms() {
+      if (!localStorage.getItem('taio_terms_agreed')) {
+        document.getElementById('termsModal').classList.remove('hidden');
+      }
+    }
+
+    function onTermsCheckboxChange() {
+      const cb = document.getElementById('termsCheckbox');
+      const btn = document.getElementById('termsAgreeBtn');
+      if (cb.checked) {
+        btn.disabled = false;
+        btn.className = "w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition shadow-sm cursor-pointer";
+      } else {
+        btn.disabled = true;
+        btn.className = "w-full py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-sm transition opacity-50 cursor-not-allowed";
+      }
+    }
+
+    function acceptTerms() {
+      const cb = document.getElementById('termsCheckbox');
+      if (cb.checked) {
+        localStorage.setItem('taio_terms_agreed', 'true');
+        document.getElementById('termsModal').classList.add('hidden');
+      }
+    }
+
+    checkFirstTimeTerms();
   </script>
 </body>
 </html>
@@ -1236,7 +1324,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
             html_rendered = html_rendered.replace("__TELEGRAM_BOT_URL__", f"https://t.me/{bot_username}")
             html_rendered = html_rendered.replace("__IS_ADMIN_VIP__", "true" if is_admin else "false")
             html_rendered = html_rendered.replace("__CLIENT_IP__", client_ip)
-            html_rendered = html_rendered.replace("__ADMIN_TOKEN__", ADMIN_TOKEN)
+            html_rendered = html_rendered.replace("__ADMIN_TOKEN__", ADMIN_TOKEN if is_admin else "")
 
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1535,7 +1623,7 @@ def show_vip_locked_message(message):
         disable_web_page_preview=True
     )
 
-# --- CÁC LỆNH DÀNH RIÊNG CHO ADMIN ---
+# --- CÁC LỆNH DÀNH RIÊNG CHO ADMIN (ẨN HOÀN TOÀN KHỎI PUBLIC) ---
 @bot.message_handler(commands=['claimadmin', 'setadmin'])
 def handle_claim_admin(message):
     global ADMIN_CHAT_ID
@@ -1567,42 +1655,38 @@ def handle_claim_admin(message):
             f"👑 <b>XÁC THỰC QUẢN TRỊ VIÊN THÀNH CÔNG!</b>\n\n"
             f"• Telegram User ID của bạn: <code>{user_id}</code>\n"
             f"• Quyền Admin đã được gán vĩnh viễn cho tài khoản này.\n\n"
-            f"👉 Bây giờ bạn có thể dùng mọi lệnh Admin như: /adminweb, /myips, /sync...",
+            f"👉 Sử dụng /adminweb để tạo link Web VIP tự động nạp IP.",
             parse_mode="HTML"
         )
     else:
-        bot.reply_to(
-            message,
-            f"⚠️ <b>Cú pháp xác thực Admin:</b>\n"
-            f"<code>/claimadmin {ADMIN_TOKEN}</code>\n\n"
-            f"• ID của bạn: <code>{user_id}</code>\n"
-            f"• Admin ID hiện tại: <code>{ADMIN_CHAT_ID}</code>",
-            parse_mode="HTML"
-        )
+        # Giữ bí mật tuyệt đối, không phản hồi token hoặc cú pháp
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
 
 @bot.message_handler(commands=['myid', 'id'])
 def handle_myid(message):
     uid = message.from_user.id
     cid = message.chat.id
     is_adm = is_admin_user(uid, cid)
+    wl = load_whitelist()
+    is_vip = is_adm or (str(uid) in wl)
+    role_str = "👑 Quản trị viên" if is_adm else ("⭐ Thành viên VIP (Đã kích hoạt)" if is_vip else "👤 Thành viên thông thường")
+
     bot.reply_to(
         message,
         f"🆔 <b>THÔNG TIN TÀI KHOẢN CỦA BẠN:</b>\n\n"
         f"• <b>User ID:</b> <code>{uid}</code>\n"
-        f"• <b>Chat ID:</b> <code>{cid}</code>\n"
         f"• <b>Tên:</b> {message.from_user.first_name}\n"
         f"• <b>Username:</b> @{message.from_user.username or 'Không có'}\n"
-        f"• <b>Vai trò:</b> {'👑 Quản trị viên (Admin)' if is_adm else '👤 Thành viên'}\n"
-        f"• <b>Admin ID đang cấu hình:</b> <code>{ADMIN_CHAT_ID}</code>\n\n"
-        f"💡 <i>Nếu bạn là Admin và chưa được nhận diện, hãy gửi lệnh:</i>\n"
-        f"<code>/claimadmin {ADMIN_TOKEN}</code>",
-        parse_mode="HTML"
+        f"• <b>Trạng thái:</b> {role_str}\n\n"
+        f"💬 Tham gia nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
 
 @bot.message_handler(func=lambda msg: (msg.text or '').startswith('/duyet_'))
 def handle_duyet(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     match = re.match(r'^/duyet_(\d+)$', message.text.strip())
@@ -1639,7 +1723,7 @@ def handle_duyet(message):
 @bot.message_handler(func=lambda msg: (msg.text or '').startswith('/khoa_'))
 def handle_khoa(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     match = re.match(r'^/khoa_(\d+)$', message.text.strip())
@@ -1663,7 +1747,7 @@ def handle_khoa(message):
 @bot.message_handler(commands=['danhsach'])
 def handle_danhsach(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     wl = load_whitelist()
@@ -1676,7 +1760,7 @@ def handle_danhsach(message):
 @bot.message_handler(commands=['leads'])
 def handle_leads(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     leads = []
@@ -1700,7 +1784,7 @@ def handle_leads(message):
 @bot.message_handler(commands=['sync'])
 def handle_sync_toggle(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     text = (message.text or "").strip().lower()
@@ -1732,16 +1816,7 @@ def handle_adminweb(message):
     has_token = len(parts) > 1 and parts[1].strip() == ADMIN_TOKEN
 
     if not is_admin_user(user_id, chat_id) and not has_token:
-        bot.reply_to(
-            message, 
-            f"⛔ <b>Lệnh này chỉ dành riêng cho Admin.</b>\n\n"
-            f"• ID Telegram của bạn: <code>{user_id}</code>\n"
-            f"• Admin ID cấu hình: <code>{ADMIN_CHAT_ID}</code>\n\n"
-            f"👉 <b>Cách kích hoạt quyền Admin ngay lập tức:</b>\n"
-            f"Bạn chỉ cần gửi lệnh sau:\n"
-            f"<code>/claimadmin {ADMIN_TOKEN}</code>",
-            parse_mode="HTML"
-        )
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     # Nếu gửi kèm token hợp lệ, tự động gán quyền Admin luôn
@@ -1776,7 +1851,7 @@ def handle_adminweb(message):
 @bot.message_handler(commands=['myips'])
 def handle_myips(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     ips = load_admin_ips()
@@ -1793,7 +1868,7 @@ def handle_myips(message):
 @bot.message_handler(commands=['addip'])
 def handle_addip(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     parts = (message.text or "").strip().split()
@@ -1808,7 +1883,7 @@ def handle_addip(message):
 @bot.message_handler(commands=['delip'])
 def handle_delip(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     parts = (message.text or "").strip().split()
@@ -1825,7 +1900,7 @@ def handle_delip(message):
 @bot.message_handler(commands=['myip'])
 def handle_myip_cmd(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
-        bot.reply_to(message, "⛔ Lệnh này chỉ dành riêng cho Admin.")
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
     bot.reply_to(
@@ -1885,17 +1960,26 @@ def send_welcome(message):
     is_admin = is_admin_user(user_id, message.chat.id)
 
     if is_admin or str(user_id) in wl:
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        btn_guide = telebot.types.KeyboardButton("❓ Hướng dẫn sử dụng")
+        btn_zalo = telebot.types.KeyboardButton("💬 Vào Nhóm Zalo Hỗ Trợ")
+        btn_web = telebot.types.KeyboardButton("🌐 Mở Web Tải Video")
+        markup.row(btn_guide)
+        markup.row(btn_zalo, btn_web)
+
         welcome_text = (
-            "👋 Chào bạn! Tôi là <b>Bot tải Video tự động</b>.\n\n"
-            "✨ Hỗ trợ tải chất lượng cao không logo:\n"
-            "• ⚫ TikTok Video & Album ảnh (Miễn phí 100%)\n"
-            "• 🔵 Facebook Reels & Video (Miễn phí 100%)\n"
-            "• 🔴 YouTube / Shorts (Gói VIP Nâng cao)\n\n"
-            "👉 Chỉ cần dán đường link video vào đây, tôi sẽ tải và gửi lại file cho bạn ngay lập tức!"
+            "👋 Chào bạn! Tôi là <b>Bot Tải Video Đa Nền Tảng</b> của TAIO.Club.\n\n"
+            "✨ <b>Hỗ trợ tải chất lượng cao không logo:</b>\n"
+            "• ⚫ <b>TikTok</b>: Video & Album ảnh không logo/watermark\n"
+            "• 🔵 <b>Facebook Reels</b>: Video HD/FullHD sắc nét\n"
+            "• 🔴 <b>YouTube</b>: Hỗ trợ video dài & Shorts\n\n"
+            "👉 <b>Cách sử dụng:</b> Bạn chỉ cần dán đường link video vào đây, Bot sẽ tự động tải và gửi lại file cho bạn ngay lập tức!\n\n"
+            f"🌐 <i>Trải nghiệm phiên bản Web:</i> <a href='https://{CUSTOM_DOMAIN}'>https://{CUSTOM_DOMAIN}</a>\n"
+            f"💬 <i>Nhóm Zalo hỗ trợ:</i> <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>"
         )
         if is_admin:
             welcome_text += (
-                f"\n\n👑 <b>Menu Quản trị viên (Admin ID: {ADMIN_CHAT_ID}):</b>\n"
+                f"\n\n👑 <b>Menu Quản trị viên:</b>\n"
                 "/adminweb : Link mở Web VIP 1 chạm (tự động nạp IP điện thoại)\n"
                 "/myips : Xem danh sách IP Admin/VIP\n"
                 "/addip : Thêm IP Admin thủ công\n"
@@ -1903,7 +1987,7 @@ def send_welcome(message):
                 "/danhsach : Xem danh sách VIP\n"
                 "/sync : Bật/Tắt tự động nhận video"
             )
-        bot.reply_to(message, welcome_text, parse_mode='HTML')
+        bot.reply_to(message, welcome_text, parse_mode='HTML', reply_markup=markup, disable_web_page_preview=True)
     else:
         show_vip_locked_message(message)
 
@@ -1917,7 +2001,23 @@ def handle_message(message):
 
     # Nút bấm menu phụ
     if text == "💬 Vào Nhóm Zalo Hỗ Trợ":
-        bot.reply_to(message, f"👉 Tham gia nhóm Zalo hỗ trợ tại: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>", parse_mode="HTML")
+        bot.reply_to(message, f"👉 Tham gia nhóm Zalo hỗ trợ cộng đồng tại: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>", parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    if text == "🌐 Mở Web Tải Video":
+        bot.reply_to(message, f"🌐 Truy cập ngay phiên bản Web Studio tại: <a href='https://{CUSTOM_DOMAIN}'>https://{CUSTOM_DOMAIN}</a>", parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    if text == "❓ Hướng dẫn sử dụng":
+        guide_text = (
+            "📖 <b>HƯỚNG DẪN TẢI VIDEO 3 BƯỚC ĐƠN GIẢN:</b>\n\n"
+            "1️⃣ Mở ứng dụng <b>TikTok</b>, <b>Facebook</b> hoặc <b>YouTube</b>.\n"
+            "2️⃣ Bấm nút <b>Chia sẻ</b> ➔ Chọn <b>Sao chép liên kết</b>.\n"
+            "3️⃣ Dán link trực tiếp vào khung chat này.\n\n"
+            "⚡ Bot sẽ gửi lại file video hoàn chỉnh sạch 100% logo về máy cho bạn!\n\n"
+            f"💬 <i>Hỗ trợ giải đáp thắc mắc:</i> <a href='{ZALO_GROUP_URL}'>Nhóm Zalo TAIO</a>"
+        )
+        bot.reply_to(message, guide_text, parse_mode="HTML", disable_web_page_preview=True)
         return
 
     # Nếu người dùng nhập số điện thoại bằng tay để đăng ký (TỰ ĐỘNG KÍCH HOẠT LUÔN)
