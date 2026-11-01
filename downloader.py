@@ -323,6 +323,72 @@ def download_video(url: str, output_dir: str = None) -> str:
             return download_tiktok_fallback(url, output_dir)
         raise e
 
+def get_audio_for_download(saved_video_path: str, url: str, output_dir: str = None) -> str:
+    """
+    Tạo hoặc trích xuất file MP3 âm thanh từ video đã tải:
+    1. Với TikTok: Tải trực tiếp track MP3 chất lượng gốc từ API mà không cần re-encode.
+    2. Với các video khác: Dùng ffmpeg xuất track audio MP3.
+    """
+    if not output_dir:
+        output_dir = os.path.dirname(saved_video_path) if saved_video_path else os.path.expanduser("~/Downloads")
+    os.makedirs(output_dir, exist_ok=True)
+
+    base_name, _ = os.path.splitext(os.path.basename(saved_video_path))
+    audio_path = os.path.join(output_dir, f"{base_name} [Audio].mp3")
+
+    if os.path.exists(audio_path) and os.path.getsize(audio_path) > 1024:
+        return audio_path
+
+    # 1. ĐỐI VỚI TIKTOK: Lấy link MP3 trực tiếp từ API tikwm
+    if is_tiktok_url(url):
+        try:
+            info = extract_tiktok_fallback(url)
+            music_url = info.get('music')
+            if music_url:
+                req = urllib.request.Request(music_url, headers={
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                })
+                with urllib.request.urlopen(req, timeout=15, context=SSL_CONTEXT) as resp, open(audio_path, 'wb') as f:
+                    while chunk := resp.read(65536):
+                        f.write(chunk)
+                if os.path.exists(audio_path) and os.path.getsize(audio_path) > 1024:
+                    return audio_path
+        except Exception as e:
+            print(f"[!] Lỗi tải track MP3 TikTok trực tiếp: {e}")
+
+    # 2. ĐỐI VỚI ALBUM ẢNH (.zip) ĐÃ TẢI
+    if saved_video_path and saved_video_path.endswith('.zip'):
+        album_dir = saved_video_path[:-4]
+        if os.path.isdir(album_dir):
+            music_cand = os.path.join(album_dir, "nhac_nen.mp3")
+            if os.path.exists(music_cand):
+                try:
+                    shutil.copyfile(music_cand, audio_path)
+                    return audio_path
+                except Exception:
+                    pass
+
+    # 3. ĐỐI VỚI CÁC VIDEO KHÁC: Dùng ffmpeg tách MP3
+    if saved_video_path and os.path.exists(saved_video_path) and not saved_video_path.endswith('.zip'):
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if ffmpeg_bin:
+            cmd = [
+                ffmpeg_bin, "-y",
+                "-i", saved_video_path,
+                "-vn",
+                "-acodec", "libmp3lame",
+                "-b:a", "192k",
+                audio_path
+            ]
+            try:
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+                if res.returncode == 0 and os.path.exists(audio_path) and os.path.getsize(audio_path) > 1024:
+                    return audio_path
+            except Exception as e:
+                print(f"[!] Lỗi ffmpeg trích xuất audio: {e}")
+
+    return ""
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Cách dùng: python downloader.py <link_video>")

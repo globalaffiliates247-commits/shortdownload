@@ -628,40 +628,15 @@ HTML_PAGE = """<!DOCTYPE html>
       <!-- WINDOW BODY CONTENT (GỌN GÀNG, THOÁNG ĐÃNG) -->
       <div id="windowBodyContent" class="p-4 sm:p-6 space-y-5">
 
-        <!-- THÔNG BÁO BẢN QUYỀN & LƯU TRỮ CÁ NHÂN Ở ĐẦU APP -->
-        <div class="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/90 border border-amber-200/80 text-amber-900 text-xs leading-relaxed">
-          <i class="fa-solid fa-circle-info text-amber-600 mt-0.5 flex-shrink-0"></i>
-          <div>
-            TAIO Studio chỉ hỗ trợ lưu trữ cá nhân. Bản quyền nội dung thuộc về tác giả gốc. Người dùng tự chịu trách nhiệm khi đăng lại hoặc sử dụng cho mục đích thương mại.
+        <!-- THÔNG TIN & NHẮC NHỞ LƯU TRỮ CÁ NHÂN (1 BLOCK DUY NHẤT) -->
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-1.5">
+          <div class="flex items-center gap-2 text-slate-800 text-sm font-bold">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Lưu giữ trọn vẹn chất lượng video gốc</span>
           </div>
-        </div>
-
-        <!-- 1. SPOTLIGHT GỌN GÀNG: TẢI TIKTOK KHÔNG LOGO -->
-        <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2.5">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <h2 class="text-sm font-bold text-slate-800">Tải video TikTok không logo</h2>
-            </div>
-            <span class="text-xs text-slate-500">Nhanh chóng &bull; Ổn định</span>
-          </div>
-
           <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Tự động loại bỏ hình mờ và ID người sáng tạo, giữ trọn vẹn chất lượng video gốc và hỗ trợ tải đầy đủ cả album ảnh lướt hoặc tách file âm thanh.
+            TAIO Studio chỉ hỗ trợ lưu trữ cá nhân. Bản quyền nội dung thuộc về tác giả gốc. Người dùng tự chịu trách nhiệm khi đăng lại hoặc sử dụng cho mục đích thương mại.
           </p>
-
-          <!-- 3 Highlight Pills -->
-          <div class="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-medium">
-              <i class="fa-solid fa-check text-emerald-600"></i> Xóa sạch logo & ID
-            </span>
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-medium">
-              <i class="fa-solid fa-images text-blue-600"></i> Hỗ trợ album ảnh
-            </span>
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-medium">
-              <i class="fa-solid fa-music text-purple-600"></i> Tách file âm thanh
-            </span>
-          </div>
         </div>
 
         <!-- 2. PLATFORM TABS (ORDER: TIKTOK -> FB REELS -> YOUTUBE) -->
@@ -719,7 +694,7 @@ HTML_PAGE = """<!DOCTYPE html>
             <input 
               type="text" 
               id="videoUrl" 
-              placeholder="Dán link video TikTok cần tải không logo (https://vt.tiktok.com/...)" 
+              placeholder="Dán đường link video (TikTok, Facebook Reels, YouTube)..." 
               class="w-full pl-10 pr-24 py-3 bg-white border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 rounded-lg text-sm text-slate-800 placeholder-slate-400 outline-none transition shadow-xs"
             >
             <button 
@@ -756,10 +731,14 @@ HTML_PAGE = """<!DOCTYPE html>
               </span>
               <h3 id="resultTitle" class="text-sm font-bold text-slate-900 truncate">Tiêu đề video</h3>
               <p id="resultUploader" class="text-xs text-slate-500">Tác giả: Đang cập nhật</p>
-              <div class="pt-1">
-                <a id="resultDownloadLink" href="#" download class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition">
-                  <i class="fa-solid fa-download"></i>
-                  <span>Lưu về thiết bị</span>
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                <a id="resultDownloadLink" href="#" download class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition">
+                  <i class="fa-solid fa-video"></i>
+                  <span>Lưu video (MP4)</span>
+                </a>
+                <a id="resultAudioLink" href="#" download class="hidden inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition">
+                  <i class="fa-solid fa-music"></i>
+                  <span>Tải âm thanh (MP3)</span>
                 </a>
               </div>
             </div>
@@ -876,7 +855,7 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- MODAL: ĐIỀU KHOẢN SỬ DỤNG LẦN ĐẦU (FIRST-TIME DISCLAIMER) -->
+  <!-- MODAL: ĐIỀU KHOẢN SỬ DỤNG (XÁC NHẬN TRƯỚC KHI TẢI) -->
   <div id="termsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
     <div class="relative w-full max-w-lg rounded-xl bg-white border border-slate-200 p-5 sm:p-6 space-y-4 shadow-2xl">
       <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
@@ -891,7 +870,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
       <div class="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-700 leading-relaxed max-h-56 overflow-y-auto space-y-2">
         <p>
-          TAIO Studio là công cụ hỗ trợ sao lưu video cho mục đích cá nhân, không thương mại. Mọi quyền tác giả thuộc về người sáng tạo và chủ sở hữu nội dung gốc. Việc đăng tải lại, chỉnh sửa hoặc khai thác thương mại cần có sự cho phép của chủ sở hữu. Người dùng hoàn toàn chịu trách nhiệm pháp lý về cách sử dụng nội dung đã tải. Nếu bạn là chủ sở hữu và có yêu cầu, vui lòng liên hệ <a href="__ZALO_GROUP_URL__" target="_blank" class="text-blue-600 underline font-medium">Zalo hỗ trợ</a> để được hỗ trợ.
+          TAIO Studio là công cụ hỗ trợ sao lưu video cho mục đích cá nhân, không thương mại. Mọi quyền tác giả thuộc về người sáng tạo và chủ sở hữu nội dung gốc. Việc đăng tải lại, chỉnh sửa hoặc khai thác thương mại cần có sự cho phép của chủ sở hữu. Người dùng hoàn toàn chịu trách nhiệm pháp lý về cách sử dụng nội dung đã tải. Nếu bạn là chủ sở hữu và có yêu cầu, vui lòng liên hệ <a href="__ZALO_GROUP_URL__" target="_blank" class="text-blue-600 underline font-medium">Zalo</a> để được hỗ trợ.
         </p>
       </div>
 
@@ -901,14 +880,23 @@ HTML_PAGE = """<!DOCTYPE html>
           <span>Tôi đã đọc và đồng ý</span>
         </label>
 
-        <button 
-          id="termsAgreeBtn" 
-          disabled 
-          onclick="acceptTerms()" 
-          class="w-full py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-sm transition opacity-50 cursor-not-allowed"
-        >
-          Tiếp Tục Sử Dụng
-        </button>
+        <div class="flex items-center gap-2">
+          <button 
+            type="button" 
+            onclick="closeTermsModal()" 
+            class="w-1/3 py-2.5 px-3 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs sm:text-sm font-medium transition"
+          >
+            Hủy Bỏ
+          </button>
+          <button 
+            id="termsAgreeBtn" 
+            disabled 
+            onclick="acceptTerms()" 
+            class="w-2/3 py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-xs sm:text-sm transition opacity-50 cursor-not-allowed"
+          >
+            Xác Nhận & Tải
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1045,7 +1033,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
       if (p === 'tiktok') {
         tabTiktok.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-slate-900 bg-slate-900 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
-        videoUrlInput.placeholder = "Dán link video TikTok cần tải không logo (https://vt.tiktok.com/...)";
+        videoUrlInput.placeholder = "Dán link video hoặc album ảnh TikTok (https://vt.tiktok.com/...)";
         inputPlatformIcon.className = "fa-brands fa-tiktok text-slate-700";
       } else if (p === 'facebook') {
         tabFacebook.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-blue-600 bg-blue-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
@@ -1086,12 +1074,9 @@ HTML_PAGE = """<!DOCTYPE html>
     });
 
     // 6. XỬ LÝ TẢI VIDEO & CALL BACKEND
-    async function handleDownload() {
+    function handleDownload() {
       const url = videoUrlInput.value.trim();
       const statusBox = document.getElementById('statusBox');
-      const resultCard = document.getElementById('resultCard');
-      const downloadBtn = document.getElementById('downloadBtn');
-      const osStatusText = document.getElementById('osStatusText');
 
       if (!url) {
         statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-rose-50 border border-rose-200 text-rose-700 block";
@@ -1106,11 +1091,66 @@ HTML_PAGE = """<!DOCTYPE html>
         return;
       }
 
-      // Bắt đầu tải
+      // KIỂM TRA ĐIỀU KHOẢN TRƯỚC KHI TẢI:
+      // - Với VIP: Chỉ hiện 1 lần đầu.
+      // - Với người dùng thường: Luôn luôn hiện mỗi lần bấm Tải video ngay.
+      const vipAgreed = localStorage.getItem('taio_vip_terms_agreed');
+      if (isVip && vipAgreed) {
+        executeDownloadProcess(url, isVip);
+      } else {
+        openTermsModal();
+      }
+    }
+
+    function openTermsModal() {
+      const cb = document.getElementById('termsCheckbox');
+      const btn = document.getElementById('termsAgreeBtn');
+      cb.checked = false;
+      btn.disabled = true;
+      btn.className = "w-2/3 py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-xs sm:text-sm transition opacity-50 cursor-not-allowed";
+      document.getElementById('termsModal').classList.remove('hidden');
+    }
+
+    function closeTermsModal() {
+      document.getElementById('termsModal').classList.add('hidden');
+    }
+
+    function onTermsCheckboxChange() {
+      const cb = document.getElementById('termsCheckbox');
+      const btn = document.getElementById('termsAgreeBtn');
+      if (cb.checked) {
+        btn.disabled = false;
+        btn.className = "w-2/3 py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm transition shadow-sm cursor-pointer";
+      } else {
+        btn.disabled = true;
+        btn.className = "w-2/3 py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-xs sm:text-sm transition opacity-50 cursor-not-allowed";
+      }
+    }
+
+    function acceptTerms() {
+      const cb = document.getElementById('termsCheckbox');
+      if (!cb.checked) return;
+
+      const isVip = isAdminUser || localStorage.getItem('taio_vip_token');
+      if (isVip) {
+        localStorage.setItem('taio_vip_terms_agreed', 'true');
+      }
+
+      document.getElementById('termsModal').classList.add('hidden');
+      const url = videoUrlInput.value.trim();
+      executeDownloadProcess(url, isVip);
+    }
+
+    async function executeDownloadProcess(url, isVip) {
+      const statusBox = document.getElementById('statusBox');
+      const resultCard = document.getElementById('resultCard');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const osStatusText = document.getElementById('osStatusText');
+
       downloadBtn.disabled = true;
       downloadBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Đang xử lý và tải video...</span>';
       statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-blue-50 border border-blue-200 text-blue-800 block";
-      statusBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Đang trích xuất video trực tiếp từ máy chủ. Vui lòng đợi trong giây lát...';
+      statusBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Đang trích xuất dữ liệu trực tiếp từ máy chủ. Vui lòng đợi trong giây lát...';
       osStatusText.innerText = "Đang xử lý...";
       resultCard.classList.add('hidden');
 
@@ -1129,7 +1169,6 @@ HTML_PAGE = """<!DOCTYPE html>
         const data = await res.json();
 
         if (res.ok && data.success) {
-          // Trừ quota nếu người dùng thường
           if (!isVip) {
             quota = Math.max(0, quota - 1);
             localStorage.setItem('taio_quota', quota.toString());
@@ -1149,13 +1188,25 @@ HTML_PAGE = """<!DOCTYPE html>
             document.getElementById('resultThumb').src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='%23e2e8f0'/><text x='50%' y='50%' fill='%2364748b' font-size='12' text-anchor='middle' dy='.3em'>Video</text></svg>";
           }
 
+          // Link Video MP4
           const fileUrl = '/downloads/' + encodeURIComponent(data.filename);
           const dlBtn = document.getElementById('resultDownloadLink');
           dlBtn.href = fileUrl;
           dlBtn.setAttribute('download', data.filename);
+
+          // Link Audio MP3 (Tính năng Tách file âm thanh trên Web)
+          const audioBtn = document.getElementById('resultAudioLink');
+          if (data.audio_filename) {
+            audioBtn.href = '/downloads/' + encodeURIComponent(data.audio_filename);
+            audioBtn.setAttribute('download', data.audio_filename);
+            audioBtn.classList.remove('hidden');
+          } else {
+            audioBtn.classList.add('hidden');
+          }
+
           resultCard.classList.remove('hidden');
 
-          // Tự động kích hoạt lưu file
+          // Tự động kích hoạt lưu file video
           const autoLink = document.createElement('a');
           autoLink.href = fileUrl;
           autoLink.setAttribute('download', data.filename);
@@ -1164,7 +1215,6 @@ HTML_PAGE = """<!DOCTYPE html>
           document.body.removeChild(autoLink);
 
         } else {
-          // Hiển thị lỗi từ backend
           const errorMsg = data.error || 'Không tải được video. Vui lòng kiểm tra lại đường link.';
           statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-rose-50 border border-rose-200 text-rose-700 block";
           statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1.5"></i> ' + errorMsg;
@@ -1235,35 +1285,6 @@ HTML_PAGE = """<!DOCTYPE html>
         alert('Lỗi xác thực: ' + e.message);
       }
     }
-
-    // 8. Quản lý Điều khoản Lần đầu Sử dụng
-    function checkFirstTimeTerms() {
-      if (!localStorage.getItem('taio_terms_agreed')) {
-        document.getElementById('termsModal').classList.remove('hidden');
-      }
-    }
-
-    function onTermsCheckboxChange() {
-      const cb = document.getElementById('termsCheckbox');
-      const btn = document.getElementById('termsAgreeBtn');
-      if (cb.checked) {
-        btn.disabled = false;
-        btn.className = "w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition shadow-sm cursor-pointer";
-      } else {
-        btn.disabled = true;
-        btn.className = "w-full py-2.5 px-4 rounded-lg bg-blue-600 text-white font-semibold text-sm transition opacity-50 cursor-not-allowed";
-      }
-    }
-
-    function acceptTerms() {
-      const cb = document.getElementById('termsCheckbox');
-      if (cb.checked) {
-        localStorage.setItem('taio_terms_agreed', 'true');
-        document.getElementById('termsModal').classList.add('hidden');
-      }
-    }
-
-    checkFirstTimeTerms();
   </script>
 </body>
 </html>
@@ -1333,8 +1354,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html_rendered.encode('utf-8'))
 
-        elif path.startswith("/api/file/"):
-            filename = urllib.parse.unquote(path[len("/api/file/"):])
+        elif path.startswith("/api/file/") or path.startswith("/downloads/"):
+            prefix = "/api/file/" if path.startswith("/api/file/") else "/downloads/"
+            filename = urllib.parse.unquote(path[len(prefix):])
             filepath = os.path.join(DOWNLOAD_DIR, filename)
 
             if not os.path.commonpath([DOWNLOAD_DIR, filepath]) == DOWNLOAD_DIR or not os.path.exists(filepath):
@@ -1346,7 +1368,12 @@ class WebAppHandler(BaseHTTPRequestHandler):
             file_size = os.path.getsize(filepath)
             content_type, _ = mimetypes.guess_type(filepath)
             if not content_type:
-                content_type = "video/mp4" if filepath.endswith('.mp4') else "application/octet-stream"
+                if filepath.endswith('.mp4'):
+                    content_type = "video/mp4"
+                elif filepath.endswith('.mp3'):
+                    content_type = "audio/mpeg"
+                else:
+                    content_type = "application/octet-stream"
 
             # Xử lý tên file an toàn cho HTTP Header (chuẩn ASCII fallback + RFC 5987 UTF-8)
             # Tránh lỗi UnicodeEncodeError khi tên video tiếng Việt gây mã lỗi 502 Bad Gateway
@@ -1481,9 +1508,19 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 saved_filepath = downloader.download_video(url, output_dir=DOWNLOAD_DIR)
                 filename = os.path.basename(saved_filepath)
 
+                # Trích xuất file âm thanh MP3 (Tính năng dành riêng cho Web)
+                audio_filename = ""
+                try:
+                    audio_filepath = downloader.get_audio_for_download(saved_filepath, url, output_dir=DOWNLOAD_DIR)
+                    if audio_filepath and os.path.exists(audio_filepath):
+                        audio_filename = os.path.basename(audio_filepath)
+                except Exception as e:
+                    logger.warning(f"Audio extraction skipped or failed: {e}")
+
                 response_data = {
                     "success": True,
                     "filename": filename,
+                    "audio_filename": audio_filename,
                     "title": meta.get('title', filename),
                     "thumbnail": meta.get('thumbnail', ''),
                     "uploader": meta.get('uploader', '')
@@ -1969,8 +2006,8 @@ def send_welcome(message):
 
         welcome_text = (
             "👋 Chào bạn! Tôi là <b>Bot Tải Video Đa Nền Tảng</b> của TAIO.Club.\n\n"
-            "✨ <b>Hỗ trợ tải chất lượng cao không logo:</b>\n"
-            "• ⚫ <b>TikTok</b>: Video & Album ảnh không logo/watermark\n"
+            "✨ <b>Hỗ trợ tải chất lượng cao:</b>\n"
+            "• ⚫ <b>TikTok</b>: Video & Album ảnh chất lượng gốc\n"
             "• 🔵 <b>Facebook Reels</b>: Video HD/FullHD sắc nét\n"
             "• 🔴 <b>YouTube</b>: Hỗ trợ video dài & Shorts\n\n"
             "👉 <b>Cách sử dụng:</b> Bạn chỉ cần dán đường link video vào đây, Bot sẽ tự động tải và gửi lại file cho bạn ngay lập tức!\n\n"
@@ -2014,7 +2051,7 @@ def handle_message(message):
             "1️⃣ Mở ứng dụng <b>TikTok</b>, <b>Facebook</b> hoặc <b>YouTube</b>.\n"
             "2️⃣ Bấm nút <b>Chia sẻ</b> ➔ Chọn <b>Sao chép liên kết</b>.\n"
             "3️⃣ Dán link trực tiếp vào khung chat này.\n\n"
-            "⚡ Bot sẽ gửi lại file video hoàn chỉnh sạch 100% logo về máy cho bạn!\n\n"
+            "⚡ Bot sẽ gửi lại file video hoàn chỉnh chất lượng gốc về máy cho bạn!\n\n"
             f"💬 <i>Hỗ trợ giải đáp thắc mắc:</i> <a href='{ZALO_GROUP_URL}'>Nhóm Zalo TAIO</a>"
         )
         bot.reply_to(message, guide_text, parse_mode="HTML", disable_web_page_preview=True)
@@ -2078,7 +2115,7 @@ def handle_message(message):
             "👑 <b>Tính năng Tải YouTube là Đặc quyền VIP!</b>\n\n"
             "Hiện tại trích xuất video YouTube chất lượng cao (1080p, 4K, Tách âm thanh) là tiện ích nâng cao dành riêng cho gói VIP riêng biệt.\n\n"
             f"👉 Vui lòng liên hệ Admin qua nhóm Zalo để được hỗ trợ kích hoạt: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>\n\n"
-            "💡 <i>Mẹo: Bạn vẫn có thể tải hoàn toàn <b>MIỄN PHÍ & KHÔNG GIỚI HẠN</b> video từ <b>TikTok (không logo)</b> và <b>Facebook Reels</b>!</i>",
+            "💡 <i>Mẹo: Bạn vẫn có thể tải hoàn toàn <b>MIỄN PHÍ & KHÔNG GIỚI HẠN</b> video từ <b>TikTok</b> và <b>Facebook Reels</b>!</i>",
             parse_mode="HTML",
             reply_markup=vip_markup,
             disable_web_page_preview=True
@@ -2087,7 +2124,7 @@ def handle_message(message):
 
     platform = "Video"
     if "tiktok.com" in text.lower():
-        platform = "TikTok (Không logo)"
+        platform = "TikTok"
     elif "facebook.com" in text.lower() or "fb.watch" in text.lower():
         platform = "Facebook Reel"
     elif "youtube.com" in text.lower() or "youtu.be" in text.lower():
