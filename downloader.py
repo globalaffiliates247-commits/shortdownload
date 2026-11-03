@@ -31,6 +31,12 @@ def is_youtube_url(url: str) -> bool:
     u = url.lower()
     return "youtube.com" in u or "youtu.be" in u
 
+def is_threads_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return "threads.net" in u or "threads.com" in u
+
 def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """
     Chuẩn hóa video tương thích iOS siêu tốc (an toàn tuyệt đối cho 512MB RAM):
@@ -226,6 +232,116 @@ def get_base_ydl_opts():
 
     return opts
 
+def extract_threads_info(url: str) -> dict:
+    m = re.search(r'/post/([A-Za-z0-9_-]+)', url)
+    shortcode = m.group(1) if m else ''
+    
+    fetch_url = url.split('?')[0].rstrip('/')
+    if not fetch_url.endswith('/media'):
+        fetch_url += '/media'
+        
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Dest': 'document'
+    }
+    req = urllib.request.Request(fetch_url, headers=headers)
+    with urllib.request.urlopen(req, timeout=12, context=SSL_CONTEXT) as r:
+        html = r.read().decode('utf-8', errors='ignore')
+        
+    title_m = re.search(r'<title>(.*?)</title>', html)
+    title = title_m.group(1).strip() if title_m else 'Threads Video'
+    if ' on Threads' in title:
+        title = title.split(' on Threads')[0]
+        
+    thumbnail = ''
+    thumb_m = re.search(r'property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', html)
+    if thumb_m:
+        thumbnail = thumb_m.group(1).replace('&amp;', '&')
+        
+    uploader = 'Threads'
+    uploader_m = re.search(r'/@([A-Za-z0-9._-]+)', url)
+    if uploader_m:
+        uploader = f"@{uploader_m.group(1)}"
+        
+    return {
+        'title': title,
+        'thumbnail': thumbnail,
+        'uploader': uploader,
+        'duration': 0,
+        'shortcode': shortcode
+    }
+
+def download_threads_video(url: str, output_dir: str = None) -> str:
+    """
+    Tải video Threads chất lượng cao gốc bằng browser-level navigation scraping.
+    """
+    if not output_dir:
+        output_dir = os.path.expanduser("~/Downloads")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    m = re.search(r'/post/([A-Za-z0-9_-]+)', url)
+    shortcode = m.group(1) if m else f"threads_{int(time.time())}"
+    
+    fetch_url = url.split('?')[0].rstrip('/')
+    if not fetch_url.endswith('/media'):
+        fetch_url += '/media'
+        
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Dest': 'document'
+    }
+    req = urllib.request.Request(fetch_url, headers=headers)
+    with urllib.request.urlopen(req, timeout=12, context=SSL_CONTEXT) as r:
+        html = r.read().decode('utf-8', errors='ignore')
+        
+    video_url = None
+    if shortcode:
+        pos = html.find(f'\"code\":\"{shortcode}\"')
+        if pos != -1:
+            chunk = html[pos: pos+25000]
+            v_m = re.search(r'\"video_versions\":\s*(\[[^\]]+\])', chunk)
+            if v_m:
+                v_json = json.loads(v_m.group(1).encode('utf-8').decode('unicode_escape'))
+                if v_json and isinstance(v_json, list):
+                    video_url = v_json[0].get('url')
+                    
+    if not video_url:
+        all_v = re.findall(r'\"video_versions\":\s*(\[[^\]]+\])', html)
+        for cand in all_v:
+            try:
+                v_json = json.loads(cand.encode('utf-8').decode('unicode_escape'))
+                if v_json and isinstance(v_json, list):
+                    video_url = v_json[0].get('url')
+                    if video_url: break
+            except Exception:
+                pass
+                
+    if not video_url:
+        raise ValueError("Không tìm thấy luồng video công khai trong bài đăng Threads này. Vui lòng kiểm tra lại liên kết.")
+        
+    title_m = re.search(r'<title>(.*?)</title>', html)
+    raw_title = title_m.group(1).strip() if title_m else shortcode
+    safe_title = re.sub(r'[^\w\.\-\s]', '_', raw_title).strip()
+    if not safe_title or len(safe_title) > 60:
+        safe_title = f"Threads_{shortcode}"
+        
+    output_filepath = os.path.join(output_dir, f"{safe_title}.mp4")
+    
+    req_vid = urllib.request.Request(video_url, headers={'User-Agent': headers['User-Agent']})
+    with urllib.request.urlopen(req_vid, timeout=30, context=SSL_CONTEXT) as resp, open(output_filepath, 'wb') as f:
+        while chunk := resp.read(65536):
+            f.write(chunk)
+            
+    return ensure_ios_compatibility(output_filepath, is_tiktok=False)
+
 def extract_info(url: str):
     """
     Trích xuất tiêu đề, hình thumbnail, thời lượng và thông tin cơ bản.
@@ -233,6 +349,12 @@ def extract_info(url: str):
     if is_tiktok_url(url):
         try:
             return extract_tiktok_fallback(url)
+        except Exception:
+            pass
+
+    if is_threads_url(url):
+        try:
+            return extract_threads_info(url)
         except Exception:
             pass
 
@@ -262,7 +384,11 @@ def download_video(url: str, output_dir: str = None) -> str:
         output_dir = os.path.expanduser("~/Downloads")
     os.makedirs(output_dir, exist_ok=True)
 
-    # 1. ĐỐI VỚI TIKTOK: Ưu tiên kênh tải trực tiếp
+    # 1. ĐỐI VỚI THREADS: Bóc tách trực tiếp luồng MP4 công khai
+    if is_threads_url(url):
+        return download_threads_video(url, output_dir)
+
+    # 2. ĐỐI VỚI TIKTOK: Ưu tiên kênh tải trực tiếp
     if is_tiktok_url(url):
         try:
             return download_tiktok_fallback(url, output_dir)

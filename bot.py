@@ -421,6 +421,12 @@ HTML_PAGE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TAIO Video Downloader Studio | Tải Video Đa Năng</title>
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TAIO Studio">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/api/app-icon.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -639,7 +645,35 @@ HTML_PAGE = """<!DOCTYPE html>
           </p>
         </div>
 
-        <!-- 2. PLATFORM TABS (ORDER: TIKTOK -> FB REELS -> YOUTUBE) -->
+        <!-- PWA / MOBILE SHORTCUT PROMOTION (MOBILE FIRST) -->
+        <div id="pwaBanner" class="rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 text-white p-3 sm:p-3.5 shadow-sm flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="relative w-9 h-9 rounded-lg bg-white/20 backdrop-blur-xs flex items-center justify-center text-white text-base flex-shrink-0">
+              <i class="fa-solid fa-mobile-screen-button animate-bounce"></i>
+              <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+              </span>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-xs sm:text-sm tracking-tight truncate">Cài App Về Điện Thoại</span>
+                <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-900">1 Chạm</span>
+              </div>
+              <p class="text-[11px] text-blue-100/90 truncate">Mở ngay trên màn hình chính, không cần gõ web!</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onclick="triggerPWAInstall()" 
+            class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-lg bg-white hover:bg-slate-50 text-blue-700 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <i class="fa-solid fa-download text-xs"></i>
+            <span>Cài Ngay</span>
+          </button>
+        </div>
+
+        <!-- 2. PLATFORM TABS (ORDER: TIKTOK -> FB REELS -> THREADS -> YOUTUBE) -->
         <div class="space-y-1.5">
           <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
             <span>Chọn nền tảng video:</span>
@@ -647,24 +681,30 @@ HTML_PAGE = """<!DOCTYPE html>
               <i class="fa-solid fa-crown text-[10px]"></i> VIP ADMIN
             </span>
           </div>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-4 gap-1.5 sm:gap-2">
             
             <!-- 1. TIKTOK TAB (DEFAULT) -->
-            <button id="tabTiktok" onclick="switchPlatform('tiktok')" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-slate-900 bg-slate-900 text-white font-semibold text-xs sm:text-sm shadow-xs transition">
-              <i class="fa-brands fa-tiktok text-sm"></i>
-              <span>TikTok</span>
+            <button id="tabTiktok" onclick="switchPlatform('tiktok')" class="flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border-2 border-slate-900 bg-slate-900 text-white font-semibold text-xs sm:text-sm shadow-xs transition">
+              <i class="fa-brands fa-tiktok text-xs sm:text-sm"></i>
+              <span class="truncate">TikTok</span>
             </button>
 
             <!-- 2. FACEBOOK REELS TAB -->
-            <button id="tabFacebook" onclick="switchPlatform('facebook')" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition">
-              <i class="fa-brands fa-facebook text-blue-600 text-sm"></i>
-              <span>FB Reels</span>
+            <button id="tabFacebook" onclick="switchPlatform('facebook')" class="flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition">
+              <i class="fa-brands fa-facebook text-blue-600 text-xs sm:text-sm"></i>
+              <span class="truncate">FB Reels</span>
             </button>
 
-            <!-- 3. YOUTUBE TAB -->
-            <button id="tabYoutube" onclick="switchPlatform('youtube')" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition">
-              <i class="fa-brands fa-youtube text-red-600 text-sm"></i>
-              <span>YouTube <span class="text-amber-600 font-bold text-[10px]">(VIP)</span></span>
+            <!-- 3. THREADS TAB -->
+            <button id="tabThreads" onclick="switchPlatform('threads')" class="flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition">
+              <i class="fa-brands fa-threads text-slate-800 text-xs sm:text-sm"></i>
+              <span class="truncate">Threads</span>
+            </button>
+
+            <!-- 4. YOUTUBE TAB -->
+            <button id="tabYoutube" onclick="switchPlatform('youtube')" class="flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition">
+              <i class="fa-brands fa-youtube text-red-600 text-xs sm:text-sm"></i>
+              <span class="truncate">YouTube <span class="text-amber-600 font-bold text-[9px]">(VIP)</span></span>
             </button>
 
           </div>
@@ -694,7 +734,7 @@ HTML_PAGE = """<!DOCTYPE html>
             <input 
               type="text" 
               id="videoUrl" 
-              placeholder="Dán đường link video (TikTok, Facebook Reels, YouTube)..." 
+              placeholder="Dán đường link video (TikTok, Facebook Reels, Threads, YouTube)..." 
               class="w-full pl-10 pr-24 py-3 bg-white border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 rounded-lg text-sm text-slate-800 placeholder-slate-400 outline-none transition shadow-xs"
             >
             <button 
@@ -718,8 +758,21 @@ HTML_PAGE = """<!DOCTYPE html>
           </button>
         </div>
 
-        <!-- 5. DOWNLOAD STATUS NOTIFICATION -->
-        <div id="statusBox" class="hidden p-3.5 rounded-lg text-xs sm:text-sm transition-all duration-200"></div>
+        <!-- 5. DOWNLOAD STATUS & ANIMATED PROGRESS BAR -->
+        <div id="statusBox" class="hidden p-3.5 sm:p-4 rounded-xl border transition-all duration-200 space-y-2.5">
+          <div class="flex items-center justify-between text-xs sm:text-sm font-semibold">
+            <span id="statusLabel" class="flex items-center gap-2 text-slate-800 min-w-0">
+              <i id="statusSpinnerIcon" class="fa-solid fa-spinner fa-spin text-blue-600"></i>
+              <span id="statusMessage" class="truncate">Đang xử lý...</span>
+            </span>
+            <span id="statusPercent" class="font-mono text-blue-600 font-bold text-xs sm:text-sm flex-shrink-0">15%</span>
+          </div>
+          <!-- Progress bar track & animated fill -->
+          <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden p-0.5">
+            <div id="progressBar" class="bg-blue-600 h-full rounded-full transition-all duration-300 ease-out" style="width: 15%"></div>
+          </div>
+          <p id="statusHint" class="text-[11px] text-slate-500 italic truncate">Hệ thống đang trích xuất dữ liệu trực tiếp chất lượng gốc...</p>
+        </div>
 
         <!-- 6. VIDEO PREVIEW & RESULT CARD -->
         <div id="resultCard" class="hidden p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
@@ -901,6 +954,49 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- MODAL: HƯỚNG DẪN CÀI APP SHORTCUT (PWA) -->
+  <div id="pwaModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div class="relative w-full max-w-sm rounded-xl bg-white border border-slate-200 p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 text-base">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Cài App Về Điện Thoại</h3>
+            <p class="text-[11px] text-slate-500">Mở nhanh 1 chạm như App thật</p>
+          </div>
+        </div>
+        <button type="button" onclick="closePwaModal()" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs text-slate-700">
+        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+          <p class="font-bold text-slate-900 flex items-center gap-1.5">
+            <i class="fa-brands fa-apple text-slate-800 text-sm"></i> Dành cho iPhone (Safari):
+          </p>
+          <ol class="list-decimal list-inside space-y-1 text-slate-600 text-[11px] leading-relaxed">
+            <li>Bấm nút <b>Chia sẻ</b> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-600"></i>) ở thanh dưới cùng Safari.</li>
+            <li>Cuộn xuống và chọn <b>"Thêm vào MH chính"</b> (Add to Home Screen).</li>
+            <li>Bấm <b>Thêm</b> ở góc trên bên phải là xong!</li>
+          </ol>
+        </div>
+        <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+          <p class="font-bold text-slate-900 flex items-center gap-1.5">
+            <i class="fa-brands fa-android text-emerald-600 text-sm"></i> Dành cho Android (Chrome):
+          </p>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Bấm nút <b>"Cài đặt"</b> khi popup trình duyệt hỏi, hoặc bấm dấu 3 chấm (⋮) góc trên ➔ chọn <b>"Cài đặt ứng dụng"</b>.
+          </p>
+        </div>
+      </div>
+      <button type="button" onclick="closePwaModal()" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition cursor-pointer">
+        Đã hiểu
+      </button>
+    </div>
+  </div>
+
   <!-- JAVASCRIPT LOGIC -->
   <script>
     // 1. Quản lý Theme Desktop OS (Windows vs macOS)
@@ -1016,10 +1112,11 @@ HTML_PAGE = """<!DOCTYPE html>
     }
     updateQuotaDisplay();
 
-    // 4. Chọn Tab Nền Tảng (Order: TikTok -> Facebook -> YouTube)
+    // 4. Chọn Tab Nền Tảng (Order: TikTok -> Facebook -> Threads -> YouTube)
     let activePlatform = 'tiktok';
     const tabTiktok = document.getElementById('tabTiktok');
     const tabFacebook = document.getElementById('tabFacebook');
+    const tabThreads = document.getElementById('tabThreads');
     const tabYoutube = document.getElementById('tabYoutube');
     const videoUrlInput = document.getElementById('videoUrl');
     const inputPlatformIcon = document.getElementById('inputPlatformIcon');
@@ -1027,26 +1124,31 @@ HTML_PAGE = """<!DOCTYPE html>
     function switchPlatform(p) {
       activePlatform = p;
       // Reset tabs styling
-      [tabTiktok, tabFacebook, tabYoutube].forEach(t => {
-        t.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition";
+      [tabTiktok, tabFacebook, tabThreads, tabYoutube].forEach(t => {
+        if (!t) return;
+        t.className = "flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm shadow-xs transition";
       });
 
       if (p === 'tiktok') {
-        tabTiktok.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-slate-900 bg-slate-900 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
+        tabTiktok.className = "flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border-2 border-slate-900 bg-slate-900 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
         videoUrlInput.placeholder = "Dán link video hoặc album ảnh TikTok (https://vt.tiktok.com/...)";
         inputPlatformIcon.className = "fa-brands fa-tiktok text-slate-700";
       } else if (p === 'facebook') {
-        tabFacebook.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-blue-600 bg-blue-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
+        tabFacebook.className = "flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border-2 border-blue-600 bg-blue-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
         videoUrlInput.placeholder = "Dán link Facebook Reels hoặc Video (https://www.facebook.com/reel/...)";
         inputPlatformIcon.className = "fa-brands fa-facebook text-blue-600";
+      } else if (p === 'threads') {
+        if (tabThreads) tabThreads.className = "flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border-2 border-slate-800 bg-slate-800 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
+        videoUrlInput.placeholder = "Dán link Threads video (https://www.threads.com/@.../post/...)";
+        inputPlatformIcon.className = "fa-brands fa-threads text-slate-800";
       } else if (p === 'youtube') {
-        tabYoutube.className = "flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg border-2 border-red-600 bg-red-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
+        tabYoutube.className = "flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2 rounded-lg border-2 border-red-600 bg-red-600 text-white font-semibold text-xs sm:text-sm shadow-xs transition";
         videoUrlInput.placeholder = "Dán link YouTube hoặc Shorts (https://youtu.be/... hoặc youtube.com)";
         inputPlatformIcon.className = "fa-brands fa-youtube text-red-600";
       }
     }
 
-    // 5. Thao Tác Input: Paste & Clear
+    // 5. Thao Tác Input: Paste & Clear & Auto-detect
     async function pasteFromClipboard() {
       try {
         const text = await navigator.clipboard.readText();
@@ -1060,12 +1162,21 @@ HTML_PAGE = """<!DOCTYPE html>
     }
 
     function autoDetectPlatform(url) {
-      if (url.includes('tiktok.com')) switchPlatform('tiktok');
-      else if (url.includes('facebook.com') || url.includes('fb.watch')) switchPlatform('facebook');
-      else if (url.includes('youtube.com') || url.includes('youtu.be')) switchPlatform('youtube');
+      if (!url) return;
+      const lower = url.toLowerCase();
+      if (lower.includes('tiktok.com')) switchPlatform('tiktok');
+      else if (lower.includes('facebook.com') || lower.includes('fb.watch')) switchPlatform('facebook');
+      else if (lower.includes('threads.net') || lower.includes('threads.com')) switchPlatform('threads');
+      else if (lower.includes('youtube.com') || lower.includes('youtu.be')) switchPlatform('youtube');
     }
 
     videoUrlInput.addEventListener('input', (e) => {
+      autoDetectPlatform(e.target.value);
+    });
+    videoUrlInput.addEventListener('paste', () => {
+      setTimeout(() => autoDetectPlatform(videoUrlInput.value), 50);
+    });
+    videoUrlInput.addEventListener('change', (e) => {
       autoDetectPlatform(e.target.value);
     });
 
@@ -1143,16 +1254,47 @@ HTML_PAGE = """<!DOCTYPE html>
 
     async function executeDownloadProcess(url, isVip) {
       const statusBox = document.getElementById('statusBox');
+      const statusLabel = document.getElementById('statusLabel');
+      const statusMessage = document.getElementById('statusMessage');
+      const statusSpinnerIcon = document.getElementById('statusSpinnerIcon');
+      const statusPercent = document.getElementById('statusPercent');
+      const progressBar = document.getElementById('progressBar');
+      const statusHint = document.getElementById('statusHint');
       const resultCard = document.getElementById('resultCard');
       const downloadBtn = document.getElementById('downloadBtn');
       const osStatusText = document.getElementById('osStatusText');
 
       downloadBtn.disabled = true;
       downloadBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Đang xử lý và tải video...</span>';
-      statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-blue-50 border border-blue-200 text-blue-800 block";
-      statusBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Đang trích xuất dữ liệu trực tiếp từ máy chủ. Vui lòng đợi trong giây lát...';
+      
+      // Hiển thị thanh tiến trình ban đầu
+      statusBox.className = "p-3.5 sm:p-4 rounded-xl bg-blue-50/90 border border-blue-200 text-slate-800 block space-y-2.5 shadow-xs";
+      if (statusSpinnerIcon) statusSpinnerIcon.className = "fa-solid fa-spinner fa-spin text-blue-600";
+      if (progressBar) progressBar.className = "bg-blue-600 h-full rounded-full transition-all duration-300 ease-out";
+      if (statusPercent) statusPercent.className = "font-mono text-blue-600 font-bold text-xs sm:text-sm flex-shrink-0";
       osStatusText.innerText = "Đang xử lý...";
       resultCard.classList.add('hidden');
+
+      let currentPercent = 15;
+      const updateProgress = (val, msg, hint) => {
+        currentPercent = val;
+        if (progressBar) progressBar.style.width = val + '%';
+        if (statusPercent) statusPercent.innerText = val + '%';
+        if (msg && statusMessage) statusMessage.innerText = msg;
+        if (hint && statusHint) statusHint.innerText = hint;
+      };
+
+      updateProgress(18, "Đang kết nối tới máy chủ & phân tích liên kết...", "Đang kiểm tra chất lượng video gốc...");
+
+      const progressInterval = setInterval(() => {
+        if (currentPercent < 45) {
+          updateProgress(currentPercent + 5, "Đang trích xuất luồng video chất lượng cao...", "Nhận diện định dạng Full HD / gốc...");
+        } else if (currentPercent < 75) {
+          updateProgress(currentPercent + 3, "Đang tải dữ liệu từ máy chủ CDN...", "Tối ưu hóa băng thông & kiểm tra luồng...");
+        } else if (currentPercent < 92) {
+          updateProgress(currentPercent + 1, "Đang đồng bộ file âm thanh & đóng gói...", "Chuẩn bị tạo link tải an toàn...");
+        }
+      }, 350);
 
       try {
         const payload = {
@@ -1169,15 +1311,19 @@ HTML_PAGE = """<!DOCTYPE html>
         const data = await res.json();
 
         if (res.ok && data.success) {
+          clearInterval(progressInterval);
+          updateProgress(100, "Tải video thành công! File đang tự động lưu về máy.", "File đã sẵn sàng trên thiết bị của bạn.");
+          if (progressBar) progressBar.className = "bg-emerald-500 h-full rounded-full transition-all duration-300 ease-out";
+          statusBox.className = "p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 block space-y-2.5 shadow-xs";
+          if (statusSpinnerIcon) statusSpinnerIcon.className = "fa-solid fa-circle-check text-emerald-600";
+          if (statusPercent) statusPercent.className = "font-mono text-emerald-600 font-bold text-xs sm:text-sm flex-shrink-0";
+          osStatusText.innerText = "Hoàn tất!";
+
           if (!isVip) {
             quota = Math.max(0, quota - 1);
             localStorage.setItem('taio_quota', quota.toString());
             updateQuotaDisplay();
           }
-
-          statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-emerald-50 border border-emerald-200 text-emerald-800 block";
-          statusBox.innerHTML = '<i class="fa-solid fa-circle-check mr-1.5"></i> Tải video thành công! File đang tự động lưu về máy.';
-          osStatusText.innerText = "Hoàn tất!";
 
           // Hiển thị Result Card
           document.getElementById('resultTitle').innerText = data.title || data.filename;
@@ -1215,16 +1361,19 @@ HTML_PAGE = """<!DOCTYPE html>
           document.body.removeChild(autoLink);
 
         } else {
+          clearInterval(progressInterval);
           const errorMsg = data.error || 'Không tải được video. Vui lòng kiểm tra lại đường link.';
-          statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-rose-50 border border-rose-200 text-rose-700 block";
-          statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark mr-1.5"></i> ' + errorMsg;
+          statusBox.className = "p-3.5 sm:p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 block space-y-2";
+          statusBox.innerHTML = '<div class="flex items-start gap-2"><i class="fa-solid fa-circle-xmark text-rose-600 mt-0.5"></i> <div><b>Không thể tải:</b> ' + errorMsg + '</div></div>';
           osStatusText.innerText = "Chưa hoàn tất";
         }
       } catch (err) {
-        statusBox.className = "p-3.5 rounded-lg text-xs sm:text-sm bg-rose-50 border border-rose-200 text-rose-700 block";
-        statusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Lỗi kết nối: ' + err.message;
+        clearInterval(progressInterval);
+        statusBox.className = "p-3.5 sm:p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 block space-y-2";
+        statusBox.innerHTML = '<div class="flex items-start gap-2"><i class="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5"></i> <div><b>Lỗi kết nối:</b> ' + err.message + '</div></div>';
         osStatusText.innerText = "Lỗi kết nối";
       } finally {
+        clearInterval(progressInterval);
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = '<i class="fa-solid fa-arrow-down-to-bracket text-base"></i> <span>Tải video khác</span>';
       }
@@ -1284,6 +1433,34 @@ HTML_PAGE = """<!DOCTYPE html>
       } catch (e) {
         alert('Lỗi xác thực: ' + e.message);
       }
+    }
+
+    // 8. Quản Lý Cài Đặt Ứng Dụng PWA / Shortcut Mobile
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+    });
+
+    function triggerPWAInstall() {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted PWA install');
+          }
+          deferredInstallPrompt = null;
+        });
+      } else {
+        openPwaModal();
+      }
+    }
+
+    function openPwaModal() {
+      document.getElementById('pwaModal').classList.remove('hidden');
+    }
+    function closePwaModal() {
+      document.getElementById('pwaModal').classList.add('hidden');
     }
   </script>
 </body>
@@ -1390,6 +1567,42 @@ class WebAppHandler(BaseHTTPRequestHandler):
             with open(filepath, 'rb') as f:
                 while chunk := f.read(65536):
                     self.wfile.write(chunk)
+
+        elif path == "/manifest.json":
+            manifest_data = {
+                "name": "TAIO Studio - Tải Video Nhanh",
+                "short_name": "TAIO Studio",
+                "description": "Ứng dụng hỗ trợ lưu trữ video đa nền tảng chất lượng cao",
+                "start_url": "/",
+                "display": "standalone",
+                "background_color": "#ffffff",
+                "theme_color": "#2563eb",
+                "icons": [
+                    {
+                        "src": "/api/app-icon.svg",
+                        "sizes": "192x192 512x512",
+                        "type": "image/svg+xml",
+                        "purpose": "any maskable"
+                    }
+                ]
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(manifest_data, ensure_ascii=False).encode('utf-8'))
+
+        elif path in ("/api/app-icon.svg", "/api/app-icon.png"):
+            svg_icon = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="128" fill="#2563eb"/>
+  <circle cx="256" cy="256" r="180" fill="#1d4ed8"/>
+  <path d="M256 120v200m0 0l-70-70m70 70l70-70M156 380h200" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"""
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(svg_icon.encode('utf-8'))
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -2009,6 +2222,7 @@ def send_welcome(message):
             "✨ <b>Hỗ trợ tải chất lượng cao:</b>\n"
             "• ⚫ <b>TikTok</b>: Video & Album ảnh chất lượng gốc\n"
             "• 🔵 <b>Facebook Reels</b>: Video HD/FullHD sắc nét\n"
+            "• 🧵 <b>Threads</b>: Video Full HD sắc nét\n"
             "• 🔴 <b>YouTube</b>: Hỗ trợ video dài & Shorts\n\n"
             "👉 <b>Cách sử dụng:</b> Bạn chỉ cần dán đường link video vào đây, Bot sẽ tự động tải và gửi lại file cho bạn ngay lập tức!\n\n"
             f"🌐 <i>Trải nghiệm phiên bản Web:</i> <a href='https://{CUSTOM_DOMAIN}'>https://{CUSTOM_DOMAIN}</a>\n"
@@ -2127,6 +2341,8 @@ def handle_message(message):
         platform = "TikTok"
     elif "facebook.com" in text.lower() or "fb.watch" in text.lower():
         platform = "Facebook Reel"
+    elif "threads.net" in text.lower() or "threads.com" in text.lower():
+        platform = "Threads"
     elif "youtube.com" in text.lower() or "youtu.be" in text.lower():
         platform = "YouTube"
 
