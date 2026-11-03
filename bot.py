@@ -30,6 +30,7 @@ LEADS_FILE = os.path.join(DATA_DIR, "leads.json")
 WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 ADMIN_IPS_FILE = os.path.join(DATA_DIR, "admin_ips.json")
+PROFILES_FILE = os.path.join(DATA_DIR, "user_profiles.json")
 
 def load_admin_chat_id():
     """Lấy Admin Chat ID từ Settings nếu có, hoặc từ Env / Mặc định"""
@@ -317,6 +318,199 @@ def save_lead(name, phone, email, source, extra=None):
 
     return lead_entry
 
+# ==========================================
+# QUẢN LÝ HỒ SƠ ĐỊNH DANH NGƯỜI DÙNG & BÁO CÁO MARKDOWN
+# ==========================================
+def load_user_profiles():
+    if os.path.exists(PROFILES_FILE):
+        try:
+            with open(PROFILES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Error loading user profiles: {e}")
+    return {"registered": {}, "unregistered": {}}
+
+def save_user_profiles(profiles):
+    try:
+        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+            json.dump(profiles, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving user profiles: {e}")
+
+def record_user_activity(client_ip=None, phone=None, name=None, telegram_id=None, user_agent="", download_success=False, is_vip=False):
+    """
+    Ghi nhận và cập nhật hồ sơ định danh:
+    - Người dùng đã đăng ký: Khóa chính là SĐT, lưu kèm mảng danh sách IP đã sử dụng (khi đổi mạng wifi/4G).
+    - Người dùng chưa đăng ký: Khóa chính là IP, theo dõi số lượt đã sử dụng và thiết bị.
+    """
+    profiles = load_user_profiles()
+    reg = profiles.setdefault("registered", {})
+    unreg = profiles.setdefault("unregistered", {})
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    clean_phone = re.sub(r'[^\d+]', '', str(phone or "")).strip()
+    if clean_phone:
+        user = reg.get(clean_phone)
+        if not user:
+            user = {
+                "phone": clean_phone,
+                "name": name or "Thành viên TAIO",
+                "telegram_id": str(telegram_id or ""),
+                "ips": [client_ip] if client_ip else [],
+                "download_count": 0,
+                "first_seen": now_str,
+                "last_seen": now_str,
+                "is_vip": bool(is_vip)
+            }
+        else:
+            if name and (not user.get("name") or user.get("name") == "Thành viên TAIO"):
+                user["name"] = name
+            if telegram_id:
+                user["telegram_id"] = str(telegram_id)
+            if client_ip and client_ip not in user.get("ips", []):
+                user.setdefault("ips", []).append(client_ip)
+            if is_vip:
+                user["is_vip"] = True
+            user["last_seen"] = now_str
+
+        if download_success:
+            user["download_count"] = user.get("download_count", 0) + 1
+
+        reg[clean_phone] = user
+
+        # Gộp lượt tải từ unregistered nếu có
+        if client_ip and client_ip in unreg:
+            unreg_count = unreg[client_ip].get("download_count", 0)
+            if unreg_count > 0 and user["download_count"] <= 1:
+                user["download_count"] += unreg_count
+            del unreg[client_ip]
+
+    else:
+        # Nếu chưa có phone, thử kiểm tra IP này đã gắn với SĐT nào chưa
+        matched_phone = None
+        if client_ip:
+            for p, u in reg.items():
+                if client_ip in u.get("ips", []):
+                    matched_phone = p
+                    break
+
+        if matched_phone:
+            user = reg[matched_phone]
+            user["last_seen"] = now_str
+            if download_success:
+                user["download_count"] = user.get("download_count", 0) + 1
+        else:
+            if client_ip:
+                u_entry = unreg.get(client_ip)
+                if not u_entry:
+                    u_entry = {
+                        "ip": client_ip,
+                        "user_agent": user_agent[:120] if user_agent else "Trình duyệt Web",
+                        "download_count": 0,
+                        "first_seen": now_str,
+                        "last_seen": now_str
+                    }
+                else:
+                    u_entry["last_seen"] = now_str
+                    if user_agent and not u_entry.get("user_agent"):
+                        u_entry["user_agent"] = user_agent[:120]
+
+                if download_success:
+                    u_entry["download_count"] = u_entry.get("download_count", 0) + 1
+
+                unreg[client_ip] = u_entry
+
+    save_user_profiles(profiles)
+
+def generate_markdown_report():
+    """Tạo báo cáo định danh người dùng chuẩn Markdown .md"""
+    profiles = load_user_profiles()
+    reg = profiles.get("registered", {})
+    unreg = profiles.get("unregistered", {})
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    total_reg = len(reg)
+    total_unreg = len(unreg)
+    
+    all_unique_ips = set()
+    total_reg_downloads = 0
+    for u in reg.values():
+        all_unique_ips.update(u.get("ips", []))
+        total_reg_downloads += u.get("download_count", 0)
+
+    total_unreg_downloads = 0
+    for u in unreg.values():
+        all_unique_ips.add(u.get("ip", ""))
+        total_unreg_downloads += u.get("download_count", 0)
+    all_unique_ips.discard("")
+
+    total_downloads = total_reg_downloads + total_unreg_downloads
+
+    lines = [
+        "# 📊 Báo Cáo Định Danh Người Dùng TAIO Studio",
+        f"*Thời gian xuất báo cáo: {now_str} (GMT+7)*",
+        "",
+        "---",
+        "",
+        "## 📈 Thống Kê Tổng Quan",
+        f"- **👤 Người dùng đã đăng ký (Định danh theo SĐT):** `{total_reg}`",
+        f"- **👥 Người dùng vãng lai (Chưa đăng ký - Quản lý theo IP):** `{total_unreg}`",
+        f"- **🌐 Tổng số địa chỉ IP độc nhất đã ghi nhận:** `{len(all_unique_ips)}`",
+        f"- **⚡ Tổng số lượt tải video thành công:** `{total_downloads}`",
+        f"  - *Lượt tải từ thành viên đã đăng ký:* `{total_reg_downloads}`",
+        f"  - *Lượt tải từ người dùng vãng lai:* `{total_unreg_downloads}`",
+        "",
+        "---",
+        "",
+        "## 👑 Người Dùng Đã Đăng Ký (Khoá chính: Số Điện Thoại)",
+        "> *Hồ sơ này gom toàn bộ các địa chỉ IP của người dùng khi họ đổi mạng WiFi / 4G gắn với số điện thoại định danh.*",
+        "",
+        "| STT | Số Điện Thoại | Họ Tên | Telegram ID | Danh Sách IP Đã Sử Dụng | Lượt Tải | Lần Đầu | Lần Cuối | Phân Quyền |",
+        "| :---: | :--- | :--- | :---: | :--- | :---: | :---: | :---: | :---: |"
+    ]
+
+    if not reg:
+        lines.append("| - | *Chưa có dữ liệu* | - | - | - | - | - | - | - |")
+    else:
+        for idx, (phone, u) in enumerate(sorted(reg.items(), key=lambda x: x[1].get('last_seen', ''), reverse=True), 1):
+            ips_str = "<br>".join([f"<code>{ip}</code>" for ip in u.get("ips", [])]) or "<i>Chưa rõ</i>"
+            name = u.get("name") or "Khách hàng"
+            tg_id = f"<code>{u.get('telegram_id')}</code>" if u.get("telegram_id") else "-"
+            dl = u.get("download_count", 0)
+            f_seen = u.get("first_seen", "")
+            l_seen = u.get("last_seen", "")
+            role = "**VIP** ⭐" if u.get("is_vip") else "Thường"
+            lines.append(f"| {idx} | `{phone}` | {name} | {tg_id} | {ips_str} | {dl} | {f_seen} | {l_seen} | {role} |")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## 👤 Người Dùng Chưa Đăng Ký (Quản lý & Giám sát theo IP)",
+        "> *Danh sách người dùng vãng lai chưa để lại số điện thoại, hệ thống nhận diện và giới hạn quota theo IP.*",
+        "",
+        "| STT | Địa Chỉ IP | Thiết Bị / User Agent | Số Lượt Đã Tải | Lần Đầu Truy Cập | Lần Cuối Truy Cập |",
+        "| :---: | :--- | :--- | :---: | :---: | :---: |"
+    ])
+
+    if not unreg:
+        lines.append("| - | *Chưa có dữ liệu* | - | - | - | - |")
+    else:
+        for idx, (ip, u) in enumerate(sorted(unreg.items(), key=lambda x: x[1].get('download_count', 0), reverse=True), 1):
+            ua = u.get("user_agent", "Trình duyệt")
+            dl = u.get("download_count", 0)
+            f_seen = u.get("first_seen", "")
+            l_seen = u.get("last_seen", "")
+            lines.append(f"| {idx} | `{ip}` | {ua} | **{dl}** | {f_seen} | {l_seen} |")
+
+    lines.extend([
+        "",
+        "---",
+        "*Bản quyền © 2026 TAIO Studio • Hệ thống phân tích định danh nội bộ.*"
+    ])
+
+    return "\n".join(lines)
+
 def cleanup_old_files(directory=DOWNLOAD_DIR, max_age_seconds=600):
     """Tự động dọn dẹp file tạm cũ hơn 10 phút để tránh đầy dung lượng máy chủ"""
     now = time.time()
@@ -468,6 +662,9 @@ class WebAppHandler(BaseHTTPRequestHandler):
             # Kiểm tra phân quyền Admin / VIP qua IP, Cookie, Token
             is_admin, client_ip, auth_reason = is_admin_or_vip_request(self)
 
+            # Ghi nhận truy cập vào hồ sơ định danh
+            record_user_activity(client_ip=client_ip, user_agent=self.headers.get('User-Agent', ''), is_vip=is_admin)
+
             # Lấy username bot thật nếu có để tạo link mở bot chuẩn xác
             bot_username = "Clipbot"
             try:
@@ -490,6 +687,106 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.send_header("Set-Cookie", f"admin_token={ADMIN_TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")
             self.end_headers()
             self.wfile.write(html_rendered.encode('utf-8'))
+
+        elif path == "/connect":
+            client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+            user_agent = self.headers.get('User-Agent', '')
+            query_params = urllib.parse.parse_qs(parsed.query)
+            t_uid = query_params.get('t_uid', [''])[0].strip()
+
+            phone_found = ""
+            name_found = ""
+            wl = load_whitelist()
+            if t_uid and t_uid in wl:
+                phone_found = wl[t_uid].get('phone', '')
+                name_found = wl[t_uid].get('name', '')
+
+            if not phone_found and os.path.exists(LEADS_FILE):
+                try:
+                    with open(LEADS_FILE, "r", encoding="utf-8") as f:
+                        for ld in json.load(f):
+                            if str(ld.get("extra", {}).get("user_id")) == t_uid:
+                                phone_found = ld.get("phone", "")
+                                name_found = ld.get("name", "")
+                                break
+                except Exception:
+                    pass
+
+            record_user_activity(
+                client_ip=client_ip,
+                phone=phone_found,
+                name=name_found,
+                telegram_id=t_uid,
+                user_agent=user_agent
+            )
+
+            # Chuyển hướng người dùng về trang chủ
+            self.send_response(302)
+            self.send_header("Location", "/")
+            if t_uid:
+                self.send_header("Set-Cookie", f"taio_tg_uid={t_uid}; Path=/; Max-Age=31536000")
+            self.end_headers()
+
+        elif path in ("/report.md", "/analytics.md", "/data.md"):
+            md_content = generate_markdown_report()
+            md_bytes = md_content.encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "text/markdown; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Content-Length", str(len(md_bytes)))
+            self.end_headers()
+            self.wfile.write(md_bytes)
+
+        elif path in ("/report", "/analytics"):
+            md_content = generate_markdown_report()
+            html_report = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo Cáo Định Danh - TAIO Studio</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+.prose table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1.5rem; }}
+.prose th, .prose td {{ border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 13px; }}
+.prose th {{ background: #f8fafc; font-weight: 700; color: #1e293b; text-align: left; }}
+.prose tr:nth-child(even) {{ background: #fdfdfe; }}
+.prose tr:hover {{ background: #f1f5f9; }}
+.prose code {{ background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #0f172a; }}
+.prose h1 {{ font-size: 1.6rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; }}
+.prose h2 {{ font-size: 1.25rem; font-weight: 700; color: #1e293b; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }}
+.prose blockquote {{ border-left: 4px solid #3b82f6; padding-left: 12px; font-style: italic; color: #64748b; margin: 8px 0; }}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 sm:p-8">
+  <div class="max-w-5xl mx-auto bg-white rounded-2xl border border-slate-200 p-6 sm:p-10 shadow-sm">
+    <div class="flex items-center justify-between pb-4 border-b border-slate-200 mb-6">
+      <div class="flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Hệ Thống Phân Tích Định Danh</span>
+      </div>
+      <a href="/report.md" download="taio_user_report.md" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition">
+        <i class="fa-solid fa-file-arrow-down"></i> Tải file .md
+      </a>
+    </div>
+    <div id="content" class="prose max-w-none"></div>
+  </div>
+  <script>
+    const rawMd = {json.dumps(md_content)};
+    document.getElementById('content').innerHTML = marked.parse(rawMd);
+  </script>
+</body>
+</html>"""
+            html_bytes = html_report.encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Content-Length", str(len(html_bytes)))
+            self.end_headers()
+            self.wfile.write(html_bytes)
 
         elif path.startswith("/api/file/") or path.startswith("/downloads/"):
             prefix = "/api/file/" if path.startswith("/api/file/") else "/downloads/"
@@ -593,24 +890,26 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
         elif parsed.path == "/api/lead":
+            client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
             try:
                 data = json.loads(body.decode('utf-8'))
-                name = data.get("name", "").strip()
                 phone = data.get("phone", "").strip()
+                name = data.get("name", "").strip() or "Khách Web"
                 email = data.get("email", "").strip()
                 source = data.get("source", "Web Unlock (Lead Gate)")
 
-                if not name or not phone:
-                    raise ValueError("Họ tên và số điện thoại không được để trống!")
+                if not phone:
+                    raise ValueError("Số điện thoại không được để trống!")
 
-                save_lead(name=name, phone=phone, email=email, source=source)
+                save_lead(name=name, phone=phone, email=email, source=source, extra={"ip": client_ip})
+                record_user_activity(client_ip=client_ip, phone=phone, name=name, user_agent=self.headers.get('User-Agent', ''))
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True, "bonus": 5}).encode('utf-8'))
+                self.wfile.write(json.dumps({"success": True, "bonus": 10}).encode('utf-8'))
             except Exception as e:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -693,6 +992,14 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps(response_data).encode('utf-8'))
+
+                # Ghi nhận lượt tải thành công vào hồ sơ định danh
+                record_user_activity(
+                    client_ip=client_ip,
+                    user_agent=self.headers.get('User-Agent', ''),
+                    download_success=True,
+                    is_vip=is_admin
+                )
 
                 # Tự động gửi 1 bản sao video về Telegram của Admin ngầm
                 threading.Thread(
@@ -982,6 +1289,30 @@ def handle_leads(message):
 
     bot.reply_to(message, "\n".join(lines), parse_mode="HTML")
 
+@bot.message_handler(commands=['report', 'baocao', 'md'])
+def handle_report_command(message):
+    user_id = message.from_user.id
+    if not is_admin_user(user_id, message.chat.id):
+        bot.reply_to(message, "⛔ Lệnh này chỉ dành cho Super Admin.")
+        return
+
+    profiles = load_user_profiles()
+    reg = profiles.get("registered", {})
+    unreg = profiles.get("unregistered", {})
+
+    report_url = f"https://{CUSTOM_DOMAIN}/report"
+    raw_md_url = f"https://{CUSTOM_DOMAIN}/report.md"
+
+    summary_text = (
+        f"📊 <b>BÁO CÁO ĐỊNH DANH NGƯỜI DÙNG TAIO:</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Người dùng đã đăng ký (SĐT):</b> {len(reg)}\n"
+        f"👥 <b>Người dùng vãng lai (theo IP):</b> {len(unreg)}\n\n"
+        f"👉 <b>Xem báo cáo trực quan (HTML):</b>\n<a href='{report_url}'>{report_url}</a>\n\n"
+        f"📥 <b>Xem file Markdown gốc (.md):</b>\n<a href='{raw_md_url}'>{raw_md_url}</a>"
+    )
+    bot.reply_to(message, summary_text, parse_mode="HTML", disable_web_page_preview=True)
+
 @bot.message_handler(commands=['sync'])
 def handle_sync_toggle(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
@@ -1128,6 +1459,7 @@ def handle_contact(message):
         source="telegram_bot",
         extra={"user_id": user_id, "username": username}
     )
+    record_user_activity(phone=phone, name=name, telegram_id=user_id, is_vip=True)
 
     # TỰ ĐỘNG KÍCH HOẠT QUYỀN TẢI VIDEO NGAY LẬP TỨC (KHÔNG CẦN CHỜ DUYỆT)
     wl = load_whitelist()
@@ -1183,6 +1515,7 @@ def send_welcome(message):
             welcome_text += (
                 f"\n\n👑 <b>Menu Quản trị viên:</b>\n"
                 "/adminweb : Link mở Web VIP 1 chạm (tự động nạp IP điện thoại)\n"
+                "/report : Xem báo cáo định danh người dùng (.md)\n"
                 "/myips : Xem danh sách IP Admin/VIP\n"
                 "/addip : Thêm IP Admin thủ công\n"
                 "/leads : Xem khách hàng mới\n"
@@ -1207,7 +1540,8 @@ def handle_message(message):
         return
 
     if text == "🌐 Mở Web Tải Video":
-        bot.reply_to(message, f"🌐 Truy cập ngay phiên bản Web Studio tại: <a href='https://{CUSTOM_DOMAIN}'>https://{CUSTOM_DOMAIN}</a>", parse_mode="HTML", disable_web_page_preview=True)
+        connect_url = f"https://{CUSTOM_DOMAIN}/connect?t_uid={user_id}"
+        bot.reply_to(message, f"🌐 Truy cập ngay phiên bản Web Studio tại: <a href='{connect_url}'>{connect_url}</a>", parse_mode="HTML", disable_web_page_preview=True)
         return
 
     if text == "❓ Hướng dẫn sử dụng":
@@ -1234,6 +1568,7 @@ def handle_message(message):
             source="telegram_bot",
             extra={"user_id": user_id, "username": username}
         )
+        record_user_activity(phone=clean_digits, name=name, telegram_id=user_id, is_vip=True)
 
         # TỰ ĐỘNG MỞ KHÓA TỨC THÌ
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
