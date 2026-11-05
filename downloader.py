@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import glob
 import json
 import re
@@ -8,6 +9,7 @@ import shutil
 import subprocess
 import urllib.request
 import urllib.parse
+import urllib.error
 
 try:
     import yt_dlp
@@ -232,7 +234,44 @@ def get_base_ydl_opts():
 
     return opts
 
+def resolve_threads_url(url: str) -> str:
+    """
+    Chuẩn hóa liên kết Threads:
+    Nếu là dạng share link (vd: threads.com/share/..., threads.net/share/..., hoặc threads.net/t/...)
+    thì giải quyết 301/302 Redirect để lấy link gốc bài viết dạng /post/{shortcode}.
+    """
+    if not url:
+        return url
+    
+    if "/post/" in url:
+        return url
+
+    clean_url = url.split('?')[0].strip()
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    }
+    
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    try:
+        req = urllib.request.Request(clean_url, headers=headers)
+        opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=SSL_CONTEXT), NoRedirect)
+        opener.open(req)
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            loc = e.headers.get('Location')
+            if loc:
+                return loc
+    except Exception:
+        pass
+
+    return url
+
 def extract_threads_info(url: str) -> dict:
+    url = resolve_threads_url(url)
     m = re.search(r'/post/([A-Za-z0-9_-]+)', url)
     shortcode = m.group(1) if m else ''
     
@@ -283,6 +322,7 @@ def download_threads_video(url: str, output_dir: str = None) -> str:
         output_dir = os.path.expanduser("~/Downloads")
     os.makedirs(output_dir, exist_ok=True)
     
+    url = resolve_threads_url(url)
     m = re.search(r'/post/([A-Za-z0-9_-]+)', url)
     shortcode = m.group(1) if m else f"threads_{int(time.time())}"
     
@@ -323,6 +363,25 @@ def download_threads_video(url: str, output_dir: str = None) -> str:
                     if video_url: break
             except Exception:
                 pass
+
+    if not video_url:
+        for pattern in [
+            r'\"playable_url_quality_hd\":\s*\"([^\"]+)\"',
+            r'\"playable_url\":\s*\"([^\"]+)\"',
+            r'\"browser_native_hd_url\":\s*\"([^\"]+)\"',
+            r'\"browser_native_sd_url\":\s*\"([^\"]+)\"'
+        ]:
+            match = re.search(pattern, html)
+            if match:
+                raw_u = match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/').replace('&amp;', '&')
+                if raw_u.startswith('http'):
+                    video_url = raw_u
+                    break
+
+    if not video_url:
+        og_v = re.search(r'property=["\']og:video(?::secure_url)?["\']\s+content=["\']([^"\']+)["\']', html)
+        if og_v:
+            video_url = og_v.group(1).replace('&amp;', '&')
                 
     if not video_url:
         raise ValueError("Không tìm thấy luồng video công khai trong bài đăng Threads này. Vui lòng kiểm tra lại liên kết.")
