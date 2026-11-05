@@ -861,6 +861,7 @@
     updateQuotaDisplay();
 
     // 4. Showcase Nền Tảng & Tự Động Bắt Sóng Nền Tảng (Display-only Showcase)
+    const videoUrlInput = document.getElementById('videoUrl');
     const showcaseBadges = {
       tiktok: document.getElementById('showcaseTiktok'),
       facebook: document.getElementById('showcaseFacebook'),
@@ -1377,7 +1378,7 @@
     }
 
     // Nhận diện nếu đang chạy trong chế độ PWA Standalone (Màn hình chính)
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    if ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator && window.navigator.standalone === true)) {
       const pwaBanner = document.getElementById('pwaBanner');
       if (pwaBanner) {
         pwaBanner.innerHTML = `
