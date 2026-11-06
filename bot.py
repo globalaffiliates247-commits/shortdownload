@@ -1906,13 +1906,14 @@ def handle_message(message):
 
     except Exception as e:
         err_str = str(e)
-        if "Sign in to confirm" in err_str and "not a bot" in err_str:
+        if ("Sign in to confirm" in err_str and "not a bot" in err_str) or "The page needs to be reloaded" in err_str:
             error_text = (
-                f"🛡️ <b>YouTube yêu cầu xác thực Cookies máy chủ!</b>\n\n"
-                f"Do bot chạy trên Cloud (Render), YouTube chặn tải ẩn danh.\n\n"
+                f"🛡️ <b>YouTube yêu cầu làm mới Cookies xác thực!</b>\n\n"
+                f"Phiên cookies trên máy chủ bị xung đột hoặc YouTube yêu cầu tải lại trang (<i>The page needs to be reloaded</i>).\n\n"
                 f"👉 <b>Cách mở khóa (Dành cho Admin):</b>\n"
-                f"1. Xuất file <code>cookies.txt</code> từ YouTube (dùng extension <i>TAIO Cookie Exporter</i> trên máy tính, hoặc gõ /extension).\n"
-                f"2. <b>Gửi trực tiếp file <code>cookies.txt</code> đó vào khung chat bot này!</b> (Bot sẽ tự nhận và lưu lại ngay)."
+                f"1. Mở tab <b>Ẩn danh (Incognito)</b> trên Chrome/Edge -> Đăng nhập YouTube.\n"
+                f"2. Bấm tiện ích <b>TAIO Cookie Exporter</b> -> Bấm <b>Tải file cookies.txt</b>.\n"
+                f"3. <b>Gửi trực tiếp file <code>cookies.txt</code> mới vào khung chat bot này!</b> (Bot sẽ tự động kích hoạt ngay)."
             )
         else:
             error_text = (

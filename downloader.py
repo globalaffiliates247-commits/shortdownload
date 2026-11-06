@@ -455,15 +455,38 @@ def extract_info(url: str):
         'quiet': True,
         'skip_download': True,
     })
-    with ydl.YoutubeDL(ydl_opts) as y:
-        info = y.extract_info(url, download=False)
-        return {
-            'title': info.get('title', 'Video không có tiêu đề'),
-            'thumbnail': info.get('thumbnail', ''),
-            'duration': info.get('duration', 0),
-            'uploader': info.get('uploader', 'Unknown'),
-            'extractor': info.get('extractor_key', 'Generic'),
+
+    strategies = [ydl_opts]
+    if 'cookiefile' in ydl_opts:
+        # Dự phòng không cookies nếu cookies bị xung đột / hết hạn
+        opts_no_cookies = dict(ydl_opts)
+        opts_no_cookies.pop('cookiefile', None)
+        opts_no_cookies['extractor_args'] = {
+            'youtube': {
+                'player_client': ['visionos', 'android', 'ios', 'default']
+            }
         }
+        strategies.append(opts_no_cookies)
+
+    last_err = None
+    for strat in strategies:
+        try:
+            with ydl.YoutubeDL(strat) as y:
+                info = y.extract_info(url, download=False)
+                return {
+                    'title': info.get('title', 'Video không có tiêu đề'),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'duration': info.get('duration', 0),
+                    'uploader': info.get('uploader', 'Unknown'),
+                    'extractor': info.get('extractor_key', 'Generic'),
+                }
+        except Exception as e:
+            last_err = e
+            if not is_youtube_url(url):
+                break
+    if last_err:
+        raise last_err
+    return {}
 
 def download_video(url: str, output_dir: str = None) -> str:
     """
@@ -506,29 +529,69 @@ def download_video(url: str, output_dir: str = None) -> str:
         }
     })
 
-    try:
-        with ydl.YoutubeDL(ydl_opts) as y:
-            info = y.extract_info(url, download=True)
-            filename = y.prepare_filename(info)
-            
-            base_name, _ = os.path.splitext(filename)
-            mp4_filename = f"{base_name}.mp4"
-            if os.path.exists(mp4_filename):
-                final_path = mp4_filename
-            elif os.path.exists(filename):
-                final_path = filename
-            else:
-                files = glob.glob(os.path.join(output_dir, '*'))
-                files.sort(key=os.path.getmtime, reverse=True)
-                final_path = files[0] if files else filename
+    # Danh sách chiến lược tải theo thứ tự ưu tiên:
+    # 1. Thử cấu hình tiêu chuẩn
+    # 2. Nếu có cookies mà thất bại (vd lỗi "The page needs to be reloaded"), tự động thử KHÔNG dùng cookies (vượt botwall 100% cho video công khai)
+    # 3. Thử với client mweb/android hỗ trợ cookies tốt nhất
+    strategies = [ydl_opts]
 
-            return ensure_ios_compatibility(final_path, is_tiktok=is_tiktok_url(url))
+    if 'cookiefile' in ydl_opts:
+        # Chiến lược dự phòng 1: Bỏ cookies (giải quyết triệt để lỗi "The page needs to be reloaded")
+        opts_no_cookies = dict(ydl_opts)
+        opts_no_cookies.pop('cookiefile', None)
+        opts_no_cookies['extractor_args'] = {
+            'youtube': {
+                'player_client': ['visionos', 'android', 'ios', 'default']
+            }
+        }
+        strategies.append(opts_no_cookies)
 
-    except Exception as e:
-        error_msg = str(e)
-        if is_tiktok_url(url):
-            return download_tiktok_fallback(url, output_dir)
-        raise e
+        # Chiến lược dự phòng 2: Dùng mweb/android dành riêng cho cookies
+        opts_mweb = dict(ydl_opts)
+        opts_mweb['extractor_args'] = {
+            'youtube': {
+                'player_client': ['mweb', 'android', 'web', 'default']
+            }
+        }
+        strategies.append(opts_mweb)
+    else:
+        # Nếu chưa có cookies: Dự phòng sang android / ios / mweb
+        opts_mobile = dict(ydl_opts)
+        opts_mobile['extractor_args'] = {
+            'youtube': {
+                'player_client': ['android', 'ios', 'mweb', 'default']
+            }
+        }
+        strategies.append(opts_mobile)
+
+    last_error = None
+    for idx, strat in enumerate(strategies):
+        try:
+            with ydl.YoutubeDL(strat) as y:
+                info = y.extract_info(url, download=True)
+                filename = y.prepare_filename(info)
+                
+                base_name, _ = os.path.splitext(filename)
+                mp4_filename = f"{base_name}.mp4"
+                if os.path.exists(mp4_filename):
+                    final_path = mp4_filename
+                elif os.path.exists(filename):
+                    final_path = filename
+                else:
+                    files = glob.glob(os.path.join(output_dir, '*'))
+                    files.sort(key=os.path.getmtime, reverse=True)
+                    final_path = files[0] if files else filename
+
+                return ensure_ios_compatibility(final_path, is_tiktok=is_tiktok_url(url))
+        except Exception as e:
+            last_error = e
+            print(f"[!] Chiến lược tải {idx+1} thất bại: {e}. Đang chuyển chiến lược tiếp theo...")
+            if not is_youtube_url(url):
+                break
+
+    if is_tiktok_url(url):
+        return download_tiktok_fallback(url, output_dir)
+    raise last_error
 
 def get_audio_for_download(saved_video_path: str, url: str, output_dir: str = None) -> str:
     """
