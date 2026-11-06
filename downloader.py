@@ -517,8 +517,7 @@ def download_video(url: str, output_dir: str = None) -> str:
     ydl_opts = get_base_ydl_opts()
     ydl_opts.update({
         'outtmpl': outtmpl,
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[vcodec^=avc]+bestaudio[acodec^=mp4a]/bestvideo+bestaudio/best',
-        'format_sort': ['vcodec:h264', 'acodec:m4a'],
+        'format': 'bv*+ba/b',
         'merge_output_format': 'mp4',
         'quiet': False,
         'postprocessor_args': {
