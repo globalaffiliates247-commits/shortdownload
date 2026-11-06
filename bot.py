@@ -1362,7 +1362,8 @@ def handle_sync_toggle(message):
 # --- QUẢN LÝ COOKIES YOUTUBE CHO ADMIN ---
 @bot.message_handler(commands=['cookies'])
 def handle_cookies_check(message):
-    if not is_admin_user(message.from_user.id, message.chat.id):
+    user_id = message.from_user.id
+    if not is_admin_user(user_id, message.chat.id) and message.chat.type != 'private':
         bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
         return
 
@@ -1382,7 +1383,7 @@ def handle_cookies_check(message):
             f"🍪 <b>Trạng thái Cookies YouTube:</b> CHƯA CÓ ⚠️\n\n"
             f"Do bot chạy trên Cloud (Render), YouTube chặn 100% các request không có cookies.\n\n"
             f"👉 <b>Cách nạp siêu nhanh:</b>\n"
-            f"1. Dùng Chrome/Edge cài extension <b>Get cookies.txt LOCALLY</b>.\n"
+            f"1. Dùng Chrome/Edge cài extension <b>TAIO Cookie Exporter</b> (hoặc gõ /extension để lấy).\n"
             f"2. Đăng nhập YouTube và xuất file <code>cookies.txt</code>.\n"
             f"3. <b>Kéo thả và gửi trực tiếp file <code>cookies.txt</code> đó vào khung chat bot này!</b> Bot sẽ tự động nạp và kích hoạt ngay."
         )
@@ -1390,38 +1391,59 @@ def handle_cookies_check(message):
 
 @bot.message_handler(content_types=['document'])
 def handle_admin_upload_document(message):
-    if not is_admin_user(message.from_user.id, message.chat.id):
-        return
-
     doc = message.document
     fname = (doc.file_name or "").lower()
-    if fname.endswith(".txt") or "cookie" in fname:
-        status_msg = bot.reply_to(message, "⏳ Đang tiếp nhận và cập nhật file Cookies...")
-        try:
-            file_info = bot.get_file(doc.file_id)
-            file_bytes = bot.download_file(file_info.file_path)
-            
-            cookie_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
-            with open(cookie_path, 'wb') as f:
-                f.write(file_bytes)
+    is_cookie_file = fname.endswith(".txt") or "cookie" in fname
 
-            file_size = len(file_bytes)
-            bot.edit_message_text(
-                f"🍪 <b>CẬP NHẬT COOKIES THÀNH CÔNG!</b> ✅\n\n"
-                f"• Tên file: <code>{doc.file_name}</code>\n"
-                f"• Dung lượng: <b>{file_size} bytes</b>\n"
-                f"• Vị trí lưu: <code>/app/cookies.txt</code>\n\n"
-                f"🎉 Bot đã sẵn sàng tải mọi video và Shorts từ YouTube! Hãy gửi link để thử ngay.",
-                chat_id=message.chat.id,
-                message_id=status_msg.message_id,
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            bot.edit_message_text(
-                f"❌ Lỗi khi tải và lưu file cookies: {e}",
-                chat_id=message.chat.id,
-                message_id=status_msg.message_id
-            )
+    if not is_cookie_file:
+        return
+
+    # Tự động gán quyền Admin nếu gửi file trong chat riêng với bot
+    global ADMIN_CHAT_ID
+    user_id = message.from_user.id
+    if not is_admin_user(user_id, message.chat.id):
+        if message.chat.type == 'private':
+            ADMIN_CHAT_ID = user_id
+            try:
+                settings = {}
+                if os.path.exists(SETTINGS_FILE):
+                    with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                        settings = json.load(f)
+                settings["admin_chat_id"] = ADMIN_CHAT_ID
+                with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(settings, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+        else:
+            bot.reply_to(message, "⛔ Chỉ Quản trị viên mới có thể cập nhật file Cookies cho hệ thống.")
+            return
+
+    status_msg = bot.reply_to(message, "⏳ Đang tiếp nhận và cập nhật file Cookies...")
+    try:
+        file_info = bot.get_file(doc.file_id)
+        file_bytes = bot.download_file(file_info.file_path)
+        
+        cookie_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+        with open(cookie_path, 'wb') as f:
+            f.write(file_bytes)
+
+        file_size = len(file_bytes)
+        bot.edit_message_text(
+            f"🍪 <b>CẬP NHẬT COOKIES THÀNH CÔNG!</b> ✅\n\n"
+            f"• Tên file: <code>{doc.file_name}</code>\n"
+            f"• Dung lượng: <b>{file_size} bytes</b>\n"
+            f"• Vị trí lưu: <code>/app/cookies.txt</code>\n\n"
+            f"🎉 Bot đã sẵn sàng tải mọi video và Shorts từ YouTube! Hãy gửi link để thử ngay.",
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        bot.edit_message_text(
+            f"❌ Lỗi khi tải và lưu file cookies: {e}",
+            chat_id=message.chat.id,
+            message_id=status_msg.message_id
+        )
 
 @bot.message_handler(commands=['extension', 'getextension'])
 def handle_extension_download_command(message):
