@@ -239,9 +239,27 @@ def get_base_ydl_opts():
             # Xử lý trường hợp chuỗi escape '\n' và '\t'
             raw_cookies = raw_cookies.replace('\\n', '\n').replace('\\t', '\t')
 
+            # Tự động sửa lỗi mất ký tự Tab khi copy-paste vào khung textarea Render
+            normalized_lines = []
+            for line in raw_cookies.splitlines():
+                l_strip = line.strip()
+                if not l_strip or l_strip.startswith('#'):
+                    normalized_lines.append(l_strip)
+                elif '\t' in l_strip:
+                    normalized_lines.append(l_strip)
+                else:
+                    parts = l_strip.split(None, 6)
+                    if len(parts) == 7:
+                        normalized_lines.append('\t'.join(parts))
+                    elif len(parts) == 6:
+                        normalized_lines.append('\t'.join(parts) + '\t')
+                    else:
+                        normalized_lines.append(l_strip)
+            clean_content = '\n'.join(normalized_lines) + '\n'
+
             temp_cookies = os.path.join(os.path.dirname(__file__), "temp_cookies.txt")
             with open(temp_cookies, "w", encoding="utf-8") as f:
-                f.write(raw_cookies)
+                f.write(clean_content)
             opts['cookiefile'] = temp_cookies
         except Exception as e:
             print(f"[!] Lỗi nạp YOUTUBE_COOKIES: {e}")
