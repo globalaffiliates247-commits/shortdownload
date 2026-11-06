@@ -1338,6 +1338,70 @@ def handle_sync_toggle(message):
             parse_mode="HTML"
         )
 
+# --- QUẢN LÝ COOKIES YOUTUBE CHO ADMIN ---
+@bot.message_handler(commands=['cookies'])
+def handle_cookies_check(message):
+    if not is_admin_user(message.from_user.id, message.chat.id):
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
+        return
+
+    cookie_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
+    has_file = os.path.exists(cookie_file) and os.path.getsize(cookie_file) > 10
+    has_env = bool(os.getenv("YOUTUBE_COOKIES"))
+
+    if has_file or has_env:
+        status_text = (
+            f"🍪 <b>Trạng thái Cookies YouTube:</b> ĐANG HOẠT ĐỘNG ✅\n\n"
+            f"• <b>File cookies.txt:</b> {'Có (' + str(os.path.getsize(cookie_file)) + ' bytes)' if has_file else 'Không có'}\n"
+            f"• <b>Biến môi trường YOUTUBE_COOKIES:</b> {'Đã thiết lập' if has_env else 'Chưa có'}\n\n"
+            f"💡 <b>Mẹo:</b> Để làm mới hoặc thay thế cookies, bạn chỉ cần <b>gửi trực tiếp file <code>cookies.txt</code> vào khung chat này</b>, bot sẽ tự lưu ngay lập tức!"
+        )
+    else:
+        status_text = (
+            f"🍪 <b>Trạng thái Cookies YouTube:</b> CHƯA CÓ ⚠️\n\n"
+            f"Do bot chạy trên Cloud (Render), YouTube chặn 100% các request không có cookies.\n\n"
+            f"👉 <b>Cách nạp siêu nhanh:</b>\n"
+            f"1. Dùng Chrome/Edge cài extension <b>Get cookies.txt LOCALLY</b>.\n"
+            f"2. Đăng nhập YouTube và xuất file <code>cookies.txt</code>.\n"
+            f"3. <b>Kéo thả và gửi trực tiếp file <code>cookies.txt</code> đó vào khung chat bot này!</b> Bot sẽ tự động nạp và kích hoạt ngay."
+        )
+    bot.reply_to(message, status_text, parse_mode="HTML")
+
+@bot.message_handler(content_types=['document'])
+def handle_admin_upload_document(message):
+    if not is_admin_user(message.from_user.id, message.chat.id):
+        return
+
+    doc = message.document
+    fname = (doc.file_name or "").lower()
+    if fname.endswith(".txt") or "cookie" in fname:
+        status_msg = bot.reply_to(message, "⏳ Đang tiếp nhận và cập nhật file Cookies...")
+        try:
+            file_info = bot.get_file(doc.file_id)
+            file_bytes = bot.download_file(file_info.file_path)
+            
+            cookie_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+            with open(cookie_path, 'wb') as f:
+                f.write(file_bytes)
+
+            file_size = len(file_bytes)
+            bot.edit_message_text(
+                f"🍪 <b>CẬP NHẬT COOKIES THÀNH CÔNG!</b> ✅\n\n"
+                f"• Tên file: <code>{doc.file_name}</code>\n"
+                f"• Dung lượng: <b>{file_size} bytes</b>\n"
+                f"• Vị trí lưu: <code>/app/cookies.txt</code>\n\n"
+                f"🎉 Bot đã sẵn sàng tải mọi video và Shorts từ YouTube! Hãy gửi link để thử ngay.",
+                chat_id=message.chat.id,
+                message_id=status_msg.message_id,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            bot.edit_message_text(
+                f"❌ Lỗi khi tải và lưu file cookies: {e}",
+                chat_id=message.chat.id,
+                message_id=status_msg.message_id
+            )
+
 # --- CÁC LỆNH QUẢN LÝ IP & WEB VIP DÀNH CHO ADMIN ---
 @bot.message_handler(commands=['adminweb', 'vipurl'])
 def handle_adminweb(message):
@@ -1759,11 +1823,21 @@ def handle_message(message):
             pass
 
     except Exception as e:
-        safe_edit(
-            chat_id, msg_id,
-            f"❌ <b>Có lỗi xảy ra:</b>\n<code>{str(e)}</code>\n\n"
-            f"💡 Mẹo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
-        )
+        err_str = str(e)
+        if "Sign in to confirm you're not a bot" in err_str:
+            error_text = (
+                f"🛡️ <b>YouTube yêu cầu xác thực Cookies máy chủ!</b>\n\n"
+                f"Do bot chạy trên Cloud (Render), YouTube chặn tải ẩn danh.\n\n"
+                f"👉 <b>Cách mở khóa (Dành cho Admin):</b>\n"
+                f"1. Xuất file <code>cookies.txt</code> từ YouTube (dùng extension <i>Get cookies.txt LOCALLY</i> trên máy tính).\n"
+                f"2. <b>Gửi trực tiếp file <code>cookies.txt</code> đó vào khung chat bot này!</b> (Bot sẽ tự nhận và lưu lại ngay)."
+            )
+        else:
+            error_text = (
+                f"❌ <b>Có lỗi xảy ra:</b>\n<code>{err_str}</code>\n\n"
+                f"💡 Mẹo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
+            )
+        safe_edit(chat_id, msg_id, error_text)
     finally:
         # Giải phóng slot trong hàng đợi cho người kế tiếp
         download_queue.release_slot(ticket)

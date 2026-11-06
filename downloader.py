@@ -220,16 +220,30 @@ def get_base_ydl_opts():
 
     # Hỗ trợ Cookies nếu người dùng cấu hình
     cookie_file = os.path.join(os.path.dirname(__file__), "cookies.txt")
-    if os.path.exists(cookie_file):
+    if os.path.exists(cookie_file) and os.path.getsize(cookie_file) > 10:
         opts['cookiefile'] = cookie_file
     elif os.getenv("YOUTUBE_COOKIES"):
-        temp_cookies = os.path.join(os.path.dirname(__file__), "temp_cookies.txt")
+        raw_cookies = os.getenv("YOUTUBE_COOKIES").strip()
         try:
+            # Hỗ trợ trường hợp lưu Base64 trong biến môi trường
+            import base64
+            if raw_cookies.startswith("I05ldHNjYXBl") or (len(raw_cookies) > 60 and "\t" not in raw_cookies and "\n" not in raw_cookies):
+                try:
+                    dec = base64.b64decode(raw_cookies).decode('utf-8', errors='ignore')
+                    if "youtube.com" in dec or "Netscape" in dec:
+                        raw_cookies = dec
+                except Exception:
+                    pass
+
+            # Xử lý trường hợp chuỗi escape '\n' và '\t'
+            raw_cookies = raw_cookies.replace('\\n', '\n').replace('\\t', '\t')
+
+            temp_cookies = os.path.join(os.path.dirname(__file__), "temp_cookies.txt")
             with open(temp_cookies, "w", encoding="utf-8") as f:
-                f.write(os.getenv("YOUTUBE_COOKIES"))
+                f.write(raw_cookies)
             opts['cookiefile'] = temp_cookies
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!] Lỗi nạp YOUTUBE_COOKIES: {e}")
 
     return opts
 
