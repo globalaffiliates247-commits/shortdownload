@@ -1906,12 +1906,12 @@ def handle_message(message):
 
     except Exception as e:
         err_str = str(e)
-        if "Sign in to confirm you're not a bot" in err_str:
+        if "Sign in to confirm" in err_str and "not a bot" in err_str:
             error_text = (
                 f"🛡️ <b>YouTube yêu cầu xác thực Cookies máy chủ!</b>\n\n"
                 f"Do bot chạy trên Cloud (Render), YouTube chặn tải ẩn danh.\n\n"
                 f"👉 <b>Cách mở khóa (Dành cho Admin):</b>\n"
-                f"1. Xuất file <code>cookies.txt</code> từ YouTube (dùng extension <i>Get cookies.txt LOCALLY</i> trên máy tính).\n"
+                f"1. Xuất file <code>cookies.txt</code> từ YouTube (dùng extension <i>TAIO Cookie Exporter</i> trên máy tính, hoặc gõ /extension).\n"
                 f"2. <b>Gửi trực tiếp file <code>cookies.txt</code> đó vào khung chat bot này!</b> (Bot sẽ tự nhận và lưu lại ngay)."
             )
         else:

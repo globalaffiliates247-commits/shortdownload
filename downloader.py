@@ -209,9 +209,10 @@ def get_base_ydl_opts():
 
     opts = {
         'no_warnings': True,
+        'source_address': '0.0.0.0',
         'extractor_args': {
             'youtube': {
-                'player_client': ['default', 'web', 'android_vr', 'tv']
+                'player_client': ['visionos', 'android', 'ios', 'tv', 'default']
             }
         }
     }
@@ -475,17 +476,7 @@ def download_video(url: str, output_dir: str = None) -> str:
     ydl_opts = get_base_ydl_opts()
     ydl_opts.update({
         'outtmpl': outtmpl,
-        'format': (
-            'bv*[vcodec^=avc1]+ba[acodec^=mp4a]/'
-            'bv*[vcodec^=avc]+ba[acodec^=mp4a]/'
-            'bv*[vcodec^=avc1]+ba/'
-            'bv*[vcodec^=avc]+ba/'
-            'bv*[vcodec!*=vp9][vcodec!*=vp09][vcodec!*=av01]+ba/'
-            'b[vcodec^=avc1]/'
-            'b[vcodec^=avc]/'
-            'b[vcodec!*=vp9][vcodec!*=av01]/'
-            'bestvideo[vcodec^=avc]+bestaudio/best'
-        ),
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[vcodec^=avc]+bestaudio[acodec^=mp4a]/bestvideo+bestaudio/best',
         'format_sort': ['vcodec:h264', 'acodec:m4a'],
         'merge_output_format': 'mp4',
         'quiet': False,

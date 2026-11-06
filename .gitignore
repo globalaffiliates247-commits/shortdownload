@@ -11,4 +11,6 @@ __pycache__/
 .venv/
 env/
 .env
+cookies.txt
+temp_cookies.txt
 trigger_deploy.sh

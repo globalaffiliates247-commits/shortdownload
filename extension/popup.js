@@ -72,7 +72,12 @@ async function loadCookies() {
     if (isDomainOnly) {
       cachedCookies = allCookies.filter(c => {
         const d = (c.domain || '').replace(/^\./, '').toLowerCase();
-        return d.endsWith(baseDomain.toLowerCase()) || d === currentHost.toLowerCase();
+        const isCurrent = d.endsWith(baseDomain.toLowerCase()) || d === currentHost.toLowerCase();
+        // Đối với YouTube, kèm theo cookies Google để xác thực tài khoản hoàn chỉnh nhất
+        if (baseDomain === 'youtube.com') {
+          return isCurrent || d.endsWith('google.com');
+        }
+        return isCurrent;
       });
     } else {
       cachedCookies = allCookies;
