@@ -788,6 +788,27 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
             self.end_headers()
             self.wfile.write(html_bytes)
 
+        elif path in ("/extension.zip", "/download-extension", "/extension"):
+            import zipfile
+            import io
+            ext_dir = os.path.join(os.path.dirname(__file__), "extension")
+            zip_buffer = io.BytesIO()
+            if os.path.exists(ext_dir):
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for root, dirs, files in os.walk(ext_dir):
+                        for file in files:
+                            if file.endswith('.DS_Store'): continue
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, ext_dir)
+                            zip_file.write(file_path, rel_path)
+            zip_bytes = zip_buffer.getvalue()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", 'attachment; filename="taio-cookie-exporter.zip"')
+            self.send_header("Content-Length", str(len(zip_bytes)))
+            self.end_headers()
+            self.wfile.write(zip_bytes)
+
         elif path.startswith("/api/file/") or path.startswith("/downloads/"):
             prefix = "/api/file/" if path.startswith("/api/file/") else "/downloads/"
             filename = urllib.parse.unquote(path[len(prefix):])
@@ -1401,6 +1422,45 @@ def handle_admin_upload_document(message):
                 chat_id=message.chat.id,
                 message_id=status_msg.message_id
             )
+
+@bot.message_handler(commands=['extension', 'getextension'])
+def handle_extension_download_command(message):
+    ext_dir = os.path.join(os.path.dirname(__file__), "extension")
+    if not os.path.exists(ext_dir):
+        bot.reply_to(message, "⚠️ Thư mục extension chưa được khởi tạo.")
+        return
+
+    import zipfile
+    import io
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(ext_dir):
+            for file in files:
+                if file.endswith('.DS_Store'): continue
+                file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(file_path, ext_dir)
+                zip_file.write(file_path, rel_path)
+    zip_bytes = zip_buffer.getvalue()
+    zip_file_obj = io.BytesIO(zip_bytes)
+    zip_file_obj.name = "taio-cookie-exporter.zip"
+
+    caption = (
+        "🍪 <b>TIỆN ÍCH TAIO COOKIE EXPORTER (v1.0)</b>\n\n"
+        "Tiện ích tự viết riêng để xuất Cookies chuẩn Netscape cho YouTube, Facebook, TikTok...\n"
+        "• An toàn & Riêng tư 100% (chạy offline trên máy của bạn).\n"
+        "• Dùng để xuất file <code>cookies.txt</code> và nạp cho Bot YouTube.\n\n"
+        "👉 <b>Cách cài đặt lên Chrome / Edge:</b>\n"
+        "1. Tải file zip này về máy tính và giải nén ra 1 thư mục.\n"
+        "2. Mở Chrome -> vào <code>chrome://extensions/</code> -> Bật <i>Developer mode</i>.\n"
+        "3. Bấm <i>Load unpacked</i> -> chọn thư mục vừa giải nén.\n\n"
+        "🌐 Hoặc tải trực tiếp từ Web: <code>/download-extension</code>"
+    )
+    bot.send_document(
+        message.chat.id,
+        document=zip_file_obj,
+        caption=caption,
+        parse_mode="HTML"
+    )
 
 # --- CÁC LỆNH QUẢN LÝ IP & WEB VIP DÀNH CHO ADMIN ---
 @bot.message_handler(commands=['adminweb', 'vipurl'])
