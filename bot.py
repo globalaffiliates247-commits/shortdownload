@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import apihelper
+import random
+import secrets
 import downloader
 
 # Cấu hình timeout mạng toàn cục cho telebot (tránh ngắt kết nối khi upload video)
@@ -31,10 +33,77 @@ WHITELIST_FILE = os.path.join(DATA_DIR, "whitelist.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 ADMIN_IPS_FILE = os.path.join(DATA_DIR, "admin_ips.json")
 PROFILES_FILE = os.path.join(DATA_DIR, "user_profiles.json")
+ADMIN_AUTH_FILE = os.path.join(DATA_DIR, "admin_auth.json")
+
+# Bộ nhớ phiên làm việc SuperAdmin và hàng chờ mã OTP 2FA
+PENDING_ADMIN_OTPS = {}   # temp_token -> {"otp": "...", "expires_at": ts, "username": "..."}
+ACTIVE_ADMIN_SESSIONS = {} # session_token -> {"username": "...", "ip": "...", "created_at": ts}
+
+def load_admin_auth():
+    """Tải thông tin tài khoản SuperAdmin từ admin_auth.json"""
+    default_auth = {
+        "username": "superadmin",
+        "password": "Admin@TAIO2026",
+        "phone": "66828702479",
+        "admin_telegram_ids": [8390033789]
+    }
+    if os.path.exists(ADMIN_AUTH_FILE):
+        try:
+            with open(ADMIN_AUTH_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for k, v in default_auth.items():
+                    data.setdefault(k, v)
+                return data
+        except Exception as e:
+            print(f"[!] Lỗi đọc admin_auth.json: {e}")
+    save_admin_auth(default_auth)
+    return default_auth
+
+def save_admin_auth(auth_data):
+    """Lưu thông tin tài khoản SuperAdmin vào admin_auth.json"""
+    try:
+        with open(ADMIN_AUTH_FILE, "w", encoding="utf-8") as f:
+            json.dump(auth_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[!] Lỗi ghi admin_auth.json: {e}")
+
+def get_client_ip(handler):
+    """Trích xuất địa chỉ IP thực tế của Client (hỗ trợ qua Cloudflare / Reverse Proxy Render)"""
+    headers = getattr(handler, 'headers', {})
+    ip = headers.get('CF-Connecting-IP') or headers.get('True-Client-IP')
+    if not ip and headers.get('X-Real-IP'):
+        ip = headers.get('X-Real-IP')
+    if not ip and headers.get('X-Forwarded-For'):
+        ip = headers.get('X-Forwarded-For').split(',')[0].strip()
+    if not ip and hasattr(handler, 'client_address') and handler.client_address:
+        ip = handler.client_address[0]
+    return ip or "127.0.0.1"
+
+def check_admin_session(handler):
+    """Kiểm tra Cookie phiên làm việc của SuperAdmin trên Web"""
+    cookie_header = getattr(handler, 'headers', {}).get('Cookie', '')
+    if not cookie_header:
+        return False, None
+    cookies = {}
+    for part in cookie_header.split(';'):
+        if '=' in part:
+            k, v = part.strip().split('=', 1)
+            cookies[k] = v
+    session_token = cookies.get('admin_session')
+    if not session_token:
+        return False, None
+    session = ACTIVE_ADMIN_SESSIONS.get(session_token)
+    if session:
+        # Phiên có hiệu lực 30 ngày
+        if time.time() - session.get("created_at", 0) < 30 * 86400:
+            return True, session
+        else:
+            del ACTIVE_ADMIN_SESSIONS[session_token]
+    return False, None
 
 def load_admin_chat_id():
-    """Lấy Admin Chat ID từ Settings nếu có, hoặc từ Env / Mặc định"""
-    default_id = int(os.getenv("ADMIN_CHAT_ID", "1509053609"))
+    """Lấy Admin Chat ID từ Settings nếu có, hoặc từ admin_auth / Mặc định (8390033789)"""
+    default_id = 8390033789
     try:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
@@ -53,9 +122,15 @@ TELEGRAM_GROUP_URL = os.getenv("TELEGRAM_GROUP_URL", "https://t.me/your_communit
 CUSTOM_DOMAIN = os.getenv("CUSTOM_DOMAIN", "shotdownload.taio.club")
 
 def is_admin_user(user_id, chat_id=None):
-    """Kiểm tra xem user_id hoặc chat_id có phải là Admin không"""
-    current_admin = ADMIN_CHAT_ID
+    """Kiểm tra xem user_id hoặc chat_id có phải là Admin không (hỗ trợ danh sách nhiều Admin ID)"""
+    auth = load_admin_auth()
+    admin_ids = [int(x) for x in auth.get("admin_telegram_ids", [8390033789])]
     try:
+        if user_id and int(user_id) in admin_ids:
+            return True
+        if chat_id and int(chat_id) in admin_ids:
+            return True
+        current_admin = ADMIN_CHAT_ID
         if user_id and int(user_id) == current_admin:
             return True
         if chat_id and int(chat_id) == current_admin:
@@ -229,13 +304,19 @@ def remove_admin_ip(ip):
 def is_admin_or_vip_request(handler, request_data=None):
     """
     Kiểm tra xem request từ Web có phải là Admin / VIP không.
-    Hỗ trợ 4 tầng nhận diện:
-    1. IP nằm trong danh sách Admin/VIP đã nạp (admin_ips.json hoặc ADMIN_IPS)
-    2. Cookie 'admin_token' khớp với ADMIN_TOKEN
-    3. Query param hoặc Header 'X-Admin-Token' khớp với ADMIN_TOKEN
-    4. Payload JSON có 'admin_token' khớp với ADMIN_TOKEN
+    Hỗ trợ 5 tầng nhận diện:
+    1. Phiên SuperAdmin hợp lệ qua Cookie 'admin_session'
+    2. IP nằm trong danh sách Admin/VIP đã nạp (admin_ips.json hoặc ADMIN_IPS)
+    3. Cookie 'admin_token' khớp với ADMIN_TOKEN
+    4. Query param hoặc Header 'X-Admin-Token' khớp với ADMIN_TOKEN
+    5. Payload JSON có 'admin_token' khớp với ADMIN_TOKEN
     """
-    client_ip = handler.headers.get('X-Forwarded-For', handler.client_address[0]).split(',')[0].strip()
+    client_ip = get_client_ip(handler)
+
+    is_session_admin, _ = check_admin_session(handler)
+    if is_session_admin:
+        return True, client_ip, "SuperAdmin 2FA Session"
+
     admin_ips = load_admin_ips()
     if client_ip in admin_ips:
         return True, client_ip, "IP Whitelist"
@@ -621,6 +702,16 @@ def load_html_template() -> str:
         logger.error(f"Lỗi đọc template HTML: {e}")
         return "<h1>500 - Lỗi không tìm thấy file giao diện templates/index.html</h1>"
 
+ADMIN_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "admin.html")
+
+def load_admin_template() -> str:
+    """Tải mã nguồn giao diện HTML Admin từ templates/admin.html."""
+    try:
+        with open(ADMIN_TEMPLATE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<h1>500 - Lỗi đọc template admin: {e}</h1>"
+
 # ==========================================
 # KHỞI TẠO TELEGRAM BOT (CÁCH 2)
 # ==========================================
@@ -663,7 +754,13 @@ class WebAppHandler(BaseHTTPRequestHandler):
             is_admin, client_ip, auth_reason = is_admin_or_vip_request(self)
 
             # Ghi nhận truy cập vào hồ sơ định danh
-            record_user_activity(client_ip=client_ip, user_agent=self.headers.get('User-Agent', ''), is_vip=is_admin)
+            auth = load_admin_auth()
+            admin_phone = auth.get("phone", "66828702479")
+            admin_tg = str(auth.get("admin_telegram_ids", [8390033789])[0])
+            if is_admin:
+                record_user_activity(client_ip=client_ip, phone=admin_phone, name="Super Admin (Put D Z 79)", telegram_id=admin_tg, user_agent=self.headers.get('User-Agent', ''), is_vip=True)
+            else:
+                record_user_activity(client_ip=client_ip, user_agent=self.headers.get('User-Agent', ''), is_vip=False)
 
             # Lấy username bot thật nếu có để tạo link mở bot chuẩn xác
             bot_username = "Clipbot"
@@ -689,17 +786,24 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self.wfile.write(html_rendered.encode('utf-8'))
 
         elif path == "/connect":
-            client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+            client_ip = get_client_ip(self)
             user_agent = self.headers.get('User-Agent', '')
             query_params = urllib.parse.parse_qs(parsed.query)
             t_uid = query_params.get('t_uid', [''])[0].strip()
 
             phone_found = ""
             name_found = ""
-            wl = load_whitelist()
-            if t_uid and t_uid in wl:
-                phone_found = wl[t_uid].get('phone', '')
-                name_found = wl[t_uid].get('name', '')
+            auth = load_admin_auth()
+            admin_ids = [str(x) for x in auth.get("admin_telegram_ids", [8390033789])]
+            if t_uid and t_uid in admin_ids:
+                phone_found = auth.get("phone", "66828702479")
+                name_found = "Super Admin (Put D Z 79)"
+
+            if not phone_found:
+                wl = load_whitelist()
+                if t_uid and t_uid in wl:
+                    phone_found = wl[t_uid].get('phone', '')
+                    name_found = wl[t_uid].get('name', '')
 
             if not phone_found and os.path.exists(LEADS_FILE):
                 try:
@@ -717,8 +821,11 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 phone=phone_found,
                 name=name_found,
                 telegram_id=t_uid,
-                user_agent=user_agent
+                user_agent=user_agent,
+                is_vip=is_admin_user(t_uid)
             )
+            if is_admin_user(t_uid):
+                save_admin_ip(client_ip, note=f"Admin Connect t_uid={t_uid}")
 
             # Chuyển hướng người dùng về trang chủ
             self.send_response(302)
@@ -737,56 +844,61 @@ class WebAppHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(md_bytes)
 
-        elif path in ("/report", "/analytics"):
-            md_content = generate_markdown_report()
-            html_report = f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Báo Cáo Định Danh - TAIO Studio</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
-.prose table {{ width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1.5rem; }}
-.prose th, .prose td {{ border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 13px; }}
-.prose th {{ background: #f8fafc; font-weight: 700; color: #1e293b; text-align: left; }}
-.prose tr:nth-child(even) {{ background: #fdfdfe; }}
-.prose tr:hover {{ background: #f1f5f9; }}
-.prose code {{ background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #0f172a; }}
-.prose h1 {{ font-size: 1.6rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem; }}
-.prose h2 {{ font-size: 1.25rem; font-weight: 700; color: #1e293b; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }}
-.prose blockquote {{ border-left: 4px solid #3b82f6; padding-left: 12px; font-style: italic; color: #64748b; margin: 8px 0; }}
-</style>
-</head>
-<body class="bg-slate-50 text-slate-800 p-4 sm:p-8">
-  <div class="max-w-5xl mx-auto bg-white rounded-2xl border border-slate-200 p-6 sm:p-10 shadow-sm">
-    <div class="flex items-center justify-between pb-4 border-b border-slate-200 mb-6">
-      <div class="flex items-center gap-2">
-        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Hệ Thống Phân Tích Định Danh</span>
-      </div>
-      <a href="/report.md" download="taio_user_report.md" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition">
-        <i class="fa-solid fa-file-arrow-down"></i> Tải file .md
-      </a>
-    </div>
-    <div id="content" class="prose max-w-none"></div>
-  </div>
-  <script>
-    const rawMd = {json.dumps(md_content)};
-    document.getElementById('content').innerHTML = marked.parse(rawMd);
-  </script>
-</body>
-</html>"""
-            html_bytes = html_report.encode('utf-8')
+        elif path in ("/admin", "/report", "/analytics"):
+            html = load_admin_template()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-            self.send_header("Content-Length", str(len(html_bytes)))
             self.end_headers()
-            self.wfile.write(html_bytes)
+            self.wfile.write(html.encode('utf-8'))
+
+        elif path == "/api/admin/data":
+            is_auth, session = check_admin_session(self)
+            if not is_auth:
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Unauthorized"}).encode('utf-8'))
+                return
+
+            client_ip = get_client_ip(self)
+            auth = load_admin_auth()
+            admin_phone = auth.get("phone", "66828702479")
+            admin_tg = str(auth.get("admin_telegram_ids", [8390033789])[0])
+
+            # Ghi nhận IP hiện tại của SuperAdmin
+            record_user_activity(client_ip=client_ip, phone=admin_phone, name="Super Admin (Put D Z 79)", telegram_id=admin_tg, is_vip=True)
+            save_admin_ip(client_ip, note=f"SuperAdmin Active ({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
+
+            profiles = load_user_profiles()
+            resp_data = {
+                "profiles": profiles,
+                "client_ip": client_ip,
+                "auth_info": {
+                    "username": auth.get("username", "superadmin"),
+                    "phone": auth.get("phone", "66828702479"),
+                    "admin_telegram_ids": auth.get("admin_telegram_ids", [8390033789])
+                }
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp_data, ensure_ascii=False).encode('utf-8'))
+
+        elif path == "/api/admin/logout":
+            cookie_header = self.headers.get('Cookie', '')
+            cookies = {}
+            for part in cookie_header.split(';'):
+                if '=' in part:
+                    k, v = part.strip().split('=', 1)
+                    cookies[k] = v
+            st = cookies.get('admin_session')
+            if st and st in ACTIVE_ADMIN_SESSIONS:
+                del ACTIVE_ADMIN_SESSIONS[st]
+            self.send_response(302)
+            self.send_header("Location", "/admin")
+            self.send_header("Set-Cookie", "admin_session=; Path=/; Max-Age=0")
+            self.end_headers()
 
         elif path in ("/extension.zip", "/download-extension", "/extension"):
             import zipfile
@@ -878,7 +990,240 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/auth/vip":
+        if parsed.path == "/api/admin/login":
+            client_ip = get_client_ip(self)
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                u = (data.get("username") or "").strip().lower()
+                p = (data.get("password") or "").strip()
+                auth = load_admin_auth()
+
+                valid_user = (u == auth.get("username", "").lower() or u == auth.get("phone", "").lower())
+                valid_pass = (p == auth.get("password", ""))
+
+                if not valid_user or not valid_pass:
+                    self.send_response(401)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": "Tên đăng nhập hoặc mật khẩu không chính xác!"}).encode('utf-8'))
+                    return
+
+                # Sinh OTP 6 số
+                otp = f"{random.randint(100000, 999999)}"
+                temp_token = secrets.token_hex(16)
+                PENDING_ADMIN_OTPS[temp_token] = {
+                    "otp": otp,
+                    "expires_at": time.time() + 300,
+                    "username": auth.get("username"),
+                    "ip": client_ip
+                }
+
+                # Gửi OTP qua Telegram Bot tới tất cả admin_telegram_ids
+                now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                user_agent = self.headers.get('User-Agent', 'Trình duyệt Web')[:100]
+                otp_msg = (
+                    f"🔐 <b>MÃ XÁC THỰC ĐĂNG NHẬP BACKEND TAIO</b>\n\n"
+                    f"Mã OTP của bạn là: <code>{otp}</code>\n\n"
+                    f"• <b>Tài khoản:</b> {auth.get('username')}\n"
+                    f"• <b>Địa chỉ IP yêu cầu:</b> <code>{client_ip}</code>\n"
+                    f"• <b>Thời gian:</b> {now_str}\n"
+                    f"• <b>Thiết bị:</b> <i>{user_agent}</i>\n\n"
+                    f"⚠️ <i>Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai!</i>"
+                )
+                sent_count = 0
+                for tid in auth.get("admin_telegram_ids", [8390033789]):
+                    try:
+                        bot.send_message(int(tid), otp_msg, parse_mode="HTML")
+                        sent_count += 1
+                    except Exception as e:
+                        print(f"[!] Không gửi được OTP tới {tid}: {e}")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "step": "otp_required",
+                    "temp_token": temp_token,
+                    "message": f"Mã OTP đã được gửi về Telegram ({sent_count} tài khoản nhận)"
+                }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        elif parsed.path == "/api/admin/verify-otp":
+            client_ip = get_client_ip(self)
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                temp_token = data.get("temp_token")
+                otp = (data.get("otp") or "").strip()
+
+                pending = PENDING_ADMIN_OTPS.get(temp_token)
+                if not pending or time.time() > pending.get("expires_at", 0):
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": "Mã OTP đã hết hạn hoặc không hợp lệ. Vui lòng gửi lại!"}).encode('utf-8'))
+                    return
+
+                if otp != pending.get("otp"):
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": "Mã OTP không chính xác. Vui lòng kiểm tra lại!"}).encode('utf-8'))
+                    return
+
+                # Thành công! Tạo session
+                del PENDING_ADMIN_OTPS[temp_token]
+                session_token = secrets.token_hex(24)
+                now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ACTIVE_ADMIN_SESSIONS[session_token] = {
+                    "username": pending.get("username"),
+                    "ip": client_ip,
+                    "created_at": time.time()
+                }
+
+                # TỰ ĐỘNG GÁN IP CỦA SUPERADMIN
+                auth = load_admin_auth()
+                admin_phone = auth.get("phone", "66828702479")
+                admin_tg = str(auth.get("admin_telegram_ids", [8390033789])[0])
+                save_admin_ip(client_ip, note=f"SuperAdmin Login 2FA ({now_str})")
+                record_user_activity(client_ip=client_ip, phone=admin_phone, name="Super Admin (Put D Z 79)", telegram_id=admin_tg, is_vip=True)
+
+                # Bắn thông báo xác nhận về Telegram
+                confirm_msg = (
+                    f"✅ <b>XÁC THỰC SUPERADMIN THÀNH CÔNG!</b>\n\n"
+                    f"• <b>Tài khoản:</b> {auth.get('username')}\n"
+                    f"• <b>Địa chỉ IP thiết bị:</b> <code>{client_ip}</code>\n"
+                    f"• <b>Thời gian:</b> {now_str}\n\n"
+                    f"🎉 <i>Địa chỉ IP này đã được tự động định danh và thêm vào danh sách VIP vô hạn!</i>"
+                )
+                for tid in auth.get("admin_telegram_ids", [8390033789]):
+                    try:
+                        bot.send_message(int(tid), confirm_msg, parse_mode="HTML")
+                    except Exception:
+                        pass
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie", f"admin_session={session_token}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "redirect": "/admin"}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        elif parsed.path == "/api/admin/delete-user":
+            is_auth, _ = check_admin_session(self)
+            if not is_auth:
+                self.send_response(401)
+                self.end_headers()
+                return
+
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                u_type = data.get("type")
+                target_id = str(data.get("id", "")).strip()
+
+                profiles = load_user_profiles()
+                reg = profiles.setdefault("registered", {})
+                unreg = profiles.setdefault("unregistered", {})
+                deleted = False
+
+                if u_type == "registered" and target_id in reg:
+                    del reg[target_id]
+                    deleted = True
+                elif u_type == "unregistered" and target_id in unreg:
+                    del unreg[target_id]
+                    deleted = True
+
+                if deleted:
+                    save_user_profiles(profiles)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "message": "Đã xóa thành công"}).encode('utf-8'))
+                else:
+                    self.send_response(404)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": False, "error": "Không tìm thấy hồ sơ"}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+
+        elif parsed.path == "/api/admin/config":
+            is_auth, _ = check_admin_session(self)
+            if not is_auth:
+                self.send_response(401)
+                self.end_headers()
+                return
+
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode('utf-8'))
+                action = data.get("action")
+                auth = load_admin_auth()
+
+                if action == "add_telegram_id":
+                    tid = int(data.get("telegram_id"))
+                    curr_ids = auth.setdefault("admin_telegram_ids", [8390033789])
+                    if tid not in curr_ids:
+                        curr_ids.append(tid)
+                        save_admin_auth(auth)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "config": auth}).encode('utf-8'))
+
+                elif action == "remove_telegram_id":
+                    tid = int(data.get("telegram_id"))
+                    curr_ids = auth.setdefault("admin_telegram_ids", [8390033789])
+                    if len(curr_ids) <= 1:
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"success": False, "error": "Không thể xóa ID duy nhất còn lại!"}).encode('utf-8'))
+                        return
+                    if tid in curr_ids:
+                        curr_ids.remove(tid)
+                        save_admin_auth(auth)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "config": auth}).encode('utf-8'))
+
+                elif action == "update_credentials":
+                    new_u = data.get("username", "").strip()
+                    new_ph = data.get("phone", "").strip()
+                    new_p = data.get("password", "").strip()
+                    if new_u:
+                        auth["username"] = new_u
+                    if new_ph:
+                        auth["phone"] = new_ph
+                    if new_p:
+                        auth["password"] = new_p
+                    save_admin_auth(auth)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"success": True, "config": auth}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.end_headers()
+
+        elif parsed.path == "/api/auth/vip":
             client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
@@ -1657,15 +2002,18 @@ def handle_contact(message):
     save_whitelist(wl)
 
     rm_markup = telebot.types.ReplyKeyboardRemove()
+    connect_url = f"https://{CUSTOM_DOMAIN}/connect?t_uid={user_id}"
+    inline_sync = telebot.types.InlineKeyboardMarkup()
+    inline_sync.add(telebot.types.InlineKeyboardButton("🌐 Mở Bản Web & Đồng Bộ IP Thiết Bị", url=connect_url))
     bot.reply_to(
         message,
         f"🎉 <b>XÁC NHẬN THÀNH CÔNG - ĐÃ MỞ KHÓA TẢI VIDEO!</b>\n\n"
         f"Cảm ơn bạn <b>{name}</b> (SĐT: <code>{phone}</code>).\n"
         f"Hệ thống đã <b>tự động kích hoạt quyền tải video 24/7</b> cho tài khoản của bạn ngay lập tức!\n\n"
         f"👉 <b>Bây giờ bạn có thể gửi bất kỳ đường link video nào (TikTok, Facebook Reels, YouTube) vào đây để tải ngay nhé!</b>\n\n"
-        f"💬 Nhóm Zalo hỗ trợ: <a href='{ZALO_GROUP_URL}'>{ZALO_GROUP_URL}</a>",
+        f"💡 <i>Mẹo: Bấm nút bên dưới để mở bản Web và đồng bộ địa chỉ IP thiết bị của bạn vào hệ thống:</i>",
         parse_mode="HTML",
-        reply_markup=rm_markup,
+        reply_markup=inline_sync,
         disable_web_page_preview=True
     )
 

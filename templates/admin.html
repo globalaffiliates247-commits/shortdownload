@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAIO SuperAdmin Control Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .tab-btn.active {
+      color: #2563eb;
+      border-bottom: 2px solid #2563eb;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- MÀN HÌNH ĐĂNG NHẬP 2FA (Ẩn nếu đã đăng nhập) -->
+  <div id="loginSection" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 sm:p-8">
+      
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-blue-500/30">
+          <i class="fa-solid fa-shield-halved text-2xl"></i>
+        </div>
+        <h1 class="text-xl font-bold text-slate-900">SuperAdmin Control Center</h1>
+        <p class="text-xs text-slate-500 mt-1">Xác thực 2 lớp bảo mật qua Telegram cá nhân</p>
+      </div>
+
+      <!-- BƯỚC 1: NHẬP USERNAME / PASSWORD -->
+      <form id="step1Form" onsubmit="handleStep1(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Tên đăng nhập hoặc SĐT</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <i class="fa-solid fa-user text-sm"></i>
+            </span>
+            <input type="text" id="loginUsername" required placeholder="superadmin hoặc 66828702479" 
+              class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu Quản trị</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <i class="fa-solid fa-lock text-sm"></i>
+            </span>
+            <input type="password" id="loginPassword" required placeholder="Nhập mật khẩu" 
+              class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+          </div>
+        </div>
+
+        <div id="step1Error" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
+
+        <button type="submit" id="btnStep1" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2">
+          <span>Tiếp tục & Nhận mã OTP</span>
+          <i class="fa-solid fa-arrow-right text-xs"></i>
+        </button>
+
+        <p class="text-[11px] text-center text-slate-400">
+          Mã OTP sẽ được gửi tự động về Telegram ID: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">8390033789</code>
+        </p>
+      </form>
+
+      <!-- BƯỚC 2: NHẬP MÃ OTP QUA TELEGRAM -->
+      <form id="step2Form" onsubmit="handleStep2(event)" class="space-y-4 hidden">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
+          <div class="font-semibold flex items-center gap-1.5">
+            <i class="fa-brands fa-telegram text-blue-600 text-sm"></i>
+            <span>Mã OTP đã được gửi về Telegram!</span>
+          </div>
+          <p class="text-[11px] text-blue-600">Vui lòng kiểm tra tin nhắn bot gửi tới Telegram ID của bạn để lấy mã 6 chữ số.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Mã xác thực 6 chữ số</label>
+          <input type="text" id="loginOtp" required maxlength="6" placeholder="123456" 
+            class="w-full text-center tracking-widest text-xl font-mono py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+        </div>
+
+        <div id="step2Error" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
+
+        <button type="submit" id="btnStep2" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Xác Nhận & Đăng Nhập</span>
+        </button>
+
+        <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+          <button type="button" onclick="backToStep1()" class="text-slate-500 hover:text-slate-800 hover:underline">
+            &larr; Quay lại
+          </button>
+          <button type="button" onclick="resendOtp()" id="btnResendOtp" class="text-blue-600 hover:underline font-medium">
+            Gửi lại mã OTP
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- MÀN HÌNH DASHBOARD QUẢN TRỊ (Hiển thị khi đã đăng nhập) -->
+  <div id="dashboardSection" class="hidden min-h-screen flex flex-col">
+    
+    <!-- TOP NAVIGATION BAR -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <div class="font-bold text-sm text-slate-900 leading-tight">TAIO SuperAdmin</div>
+            <div class="text-[11px] text-slate-500">Trung tâm giám sát & định danh người dùng</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Hiển thị IP hiện tại của SuperAdmin -->
+          <div class="hidden sm:flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-slate-500">IP của bạn:</span>
+            <code id="displayClientIp" class="font-semibold text-slate-800">Đang quét...</code>
+          </div>
+
+          <!-- Nút đổi mật khẩu & Telegram ID -->
+          <button onclick="switchTab('settings')" class="p-2 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition" title="Cài đặt SuperAdmin">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+
+          <!-- Nút Đăng xuất -->
+          <button onclick="handleLogout()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 font-semibold text-xs transition border border-red-200">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- TABS NAVIGATION -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-6 text-sm border-t border-slate-100">
+        <button onclick="switchTab('analytics')" id="tabBtnAnalytics" class="tab-btn py-3 text-slate-600 hover:text-slate-900 active flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Thống Kê & Người Dùng</span>
+        </button>
+        <button onclick="switchTab('settings')" id="tabBtnSettings" class="tab-btn py-3 text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+          <i class="fa-solid fa-user-shield"></i>
+          <span>Bảo Mật & Telegram 2FA</span>
+        </button>
+        <button onclick="switchTab('markdown')" id="tabBtnMarkdown" class="tab-btn py-3 text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+          <i class="fa-solid fa-file-code"></i>
+          <span>Báo Cáo .MD Gốc</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- NỘI DUNG CHÍNH -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+      <!-- TAB 1: THỐNG KÊ & NGƯỜI DÙNG -->
+      <div id="tabAnalytics" class="space-y-6">
+        
+        <!-- THỐNG KÊ TỔNG QUAN CARDS -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div class="text-xs text-slate-500 font-medium">Đã Đăng Ký (SĐT)</div>
+            <div id="statRegistered" class="text-2xl font-bold text-blue-600 mt-1">0</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Khóa chính SĐT kèm mảng IP</div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div class="text-xs text-slate-500 font-medium">Vãng Lai (Theo IP)</div>
+            <div id="statUnregistered" class="text-2xl font-bold text-amber-600 mt-1">0</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Giám sát theo IP thiết bị</div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div class="text-xs text-slate-500 font-medium">Tổng Địa Chỉ IP</div>
+            <div id="statTotalIps" class="text-2xl font-bold text-emerald-600 mt-1">0</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">IP độc nhất đã ghi nhận</div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div class="text-xs text-slate-500 font-medium">Tổng Lượt Tải Video</div>
+            <div id="statTotalDownloads" class="text-2xl font-bold text-indigo-600 mt-1">0</div>
+            <div id="statDownloadDetail" class="text-[10px] text-slate-400 mt-0.5">0 thành viên / 0 vãng lai</div>
+          </div>
+        </div>
+
+        <!-- BẢNG 1: NGƯỜI DÙNG ĐÃ ĐĂNG KÝ -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-crown text-amber-500"></i>
+                <span>Người Dùng Đã Đăng Ký (Khóa chính: Số Điện Thoại)</span>
+              </h2>
+              <p class="text-[11px] text-slate-500">Hồ sơ gom toàn bộ IP khi người dùng đổi WiFi / 4G gắn theo SĐT định danh</p>
+            </div>
+            <button onclick="loadDashboardData()" class="self-start sm:self-auto px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate-right"></i> Làm mới
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                  <th class="py-2.5 px-3 text-center w-10">STT</th>
+                  <th class="py-2.5 px-3">Số Điện Thoại</th>
+                  <th class="py-2.5 px-3">Họ Tên</th>
+                  <th class="py-2.5 px-3">Telegram ID</th>
+                  <th class="py-2.5 px-3">Danh Sách IP Đã Sử Dụng</th>
+                  <th class="py-2.5 px-3 text-center">Lượt Tải</th>
+                  <th class="py-2.5 px-3">Lần Cuối</th>
+                  <th class="py-2.5 px-3 text-center">Quyền</th>
+                  <th class="py-2.5 px-3 text-center w-16">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="registeredTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="9" class="text-center py-6 text-slate-400">Đang tải dữ liệu...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- BẢNG 2: NGƯỜI DÙNG CHƯA ĐĂNG KÝ (IP) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50/50">
+            <h2 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-user-clock text-blue-500"></i>
+              <span>Người Dùng Vãng Lai (Quản Lý & Giới Hạn Quota Theo IP)</span>
+            </h2>
+            <p class="text-[11px] text-slate-500">Danh sách khách vãng lai chưa để lại số điện thoại, quản lý quota theo IP</p>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                  <th class="py-2.5 px-3 text-center w-10">STT</th>
+                  <th class="py-2.5 px-3">Địa Chỉ IP</th>
+                  <th class="py-2.5 px-3">Thiết Bị / User Agent</th>
+                  <th class="py-2.5 px-3 text-center">Lượt Tải</th>
+                  <th class="py-2.5 px-3">Lần Đầu</th>
+                  <th class="py-2.5 px-3">Lần Cuối</th>
+                  <th class="py-2.5 px-3 text-center w-16">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="unregisteredTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="7" class="text-center py-6 text-slate-400">Đang tải dữ liệu...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 2: CÀI ĐẶT BẢO MẬT & TELEGRAM 2FA -->
+      <div id="tabSettings" class="space-y-6 hidden max-w-3xl mx-auto">
+        
+        <!-- CARD 1: QUẢN LÝ TELEGRAM ID NHẬN OTP -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4">
+          <div class="border-b border-slate-100 pb-3">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-brands fa-telegram text-blue-600"></i>
+              <span>Quản Lý Telegram ID Nhận Mã OTP (2FA)</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Mỗi khi đăng nhập vào Web Admin, hệ thống sẽ tự động gửi mã OTP xác thực tới tất cả các tài khoản Telegram trong danh sách này.
+            </p>
+          </div>
+
+          <!-- Danh sách ID hiện có -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold text-slate-700">Các Telegram ID hiện được cấp quyền:</label>
+            <div id="telegramIdList" class="space-y-1.5">
+              <!-- Render động -->
+            </div>
+          </div>
+
+          <!-- Form thêm ID mới -->
+          <form onsubmit="handleAddTelegramId(event)" class="pt-2 flex gap-2">
+            <input type="text" id="newTelegramId" required placeholder="Nhập Telegram ID mới (vd: 8390033789)" 
+              class="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <button type="submit" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center gap-1.5">
+              <i class="fa-solid fa-plus"></i> Thêm ID Mới
+            </button>
+          </form>
+          <p class="text-[11px] text-slate-400 italic">
+            * Mẹo: Để biết Telegram ID của tài khoản khác, bạn chỉ cần gõ lệnh <code>/myid</code> vào bot Telegram.
+          </p>
+        </div>
+
+        <!-- CARD 2: ĐỔI TÊN ĐĂNG NHẬP & MẬT KHẨU -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4">
+          <div class="border-b border-slate-100 pb-3">
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-key text-amber-500"></i>
+              <span>Đổi Tài Khoản & Mật Khẩu SuperAdmin</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Thay đổi thông tin đăng nhập dùng để truy cập trang quản trị này.</p>
+          </div>
+
+          <form onsubmit="handleUpdateCredentials(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập SuperAdmin</label>
+              <input type="text" id="adminUsernameInput" required 
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Số điện thoại Admin</label>
+              <input type="text" id="adminPhoneInput" required 
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Mật khẩu mới (Để trống nếu không muốn đổi)</label>
+              <input type="password" id="adminNewPassword" placeholder="Nhập mật khẩu mới an toàn" 
+                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div id="credStatus" class="hidden text-xs p-2.5 rounded-lg"></div>
+
+            <div class="pt-2">
+              <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center gap-1.5">
+                <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- TAB 3: BÁO CÁO MARKDOWN .MD -->
+      <div id="tabMarkdown" class="space-y-4 hidden max-w-4xl mx-auto">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-sm text-slate-800">File Báo Cáo Định Danh Dạng Markdown</h3>
+          <a href="/report.md" download="taio_user_report.md" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition">
+            <i class="fa-solid fa-file-arrow-down"></i> Tải file .md
+          </a>
+        </div>
+        <div class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-[600px] border border-slate-800">
+          <pre id="rawMarkdownContent">Đang tải...</pre>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- SCRIPT LOGIC AJAX & XÁC THỰC -->
+  <script>
+    let currentTempToken = "";
+    let globalData = null;
+
+    // Khởi động trang: Kiểm tra xem đã có session hợp lệ chưa
+    document.addEventListener("DOMContentLoaded", () => {
+      checkSession();
+    });
+
+    async function checkSession() {
+      try {
+        const res = await fetch("/api/admin/data");
+        if (res.ok) {
+          const data = await res.json();
+          globalData = data;
+          showDashboard(data);
+        } else {
+          showLogin();
+        }
+      } catch (err) {
+        showLogin();
+      }
+    }
+
+    function showLogin() {
+      document.getElementById("loginSection").classList.remove("hidden");
+      document.getElementById("dashboardSection").classList.add("hidden");
+      document.getElementById("step1Form").classList.remove("hidden");
+      document.getElementById("step2Form").classList.add("hidden");
+    }
+
+    function showDashboard(data) {
+      document.getElementById("loginSection").classList.add("hidden");
+      document.getElementById("dashboardSection").classList.remove("hidden");
+      renderDashboard(data);
+    }
+
+    // XỬ LÝ BƯỚC 1: SUBMIT USER/PASS -> NHẬN OTP
+    async function handleStep1(e) {
+      e.preventDefault();
+      const u = document.getElementById("loginUsername").value.trim();
+      const p = document.getElementById("loginPassword").value.trim();
+      const btn = document.getElementById("btnStep1");
+      const errBox = document.getElementById("step1Error");
+
+      errBox.classList.add("hidden");
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Đang gửi mã OTP về Telegram...`;
+
+      try {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const json = await res.json();
+        if (json.success && json.step === "otp_required") {
+          currentTempToken = json.temp_token;
+          document.getElementById("step1Form").classList.add("hidden");
+          document.getElementById("step2Form").classList.remove("hidden");
+          document.getElementById("loginOtp").focus();
+        } else {
+          errBox.innerText = json.error || "Tên đăng nhập hoặc mật khẩu không chính xác.";
+          errBox.classList.remove("hidden");
+        }
+      } catch (err) {
+        errBox.innerText = "Lỗi kết nối máy chủ: " + err.message;
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>Tiếp tục & Nhận mã OTP</span> <i class="fa-solid fa-arrow-right text-xs"></i>`;
+      }
+    }
+
+    // XỬ LÝ BƯỚC 2: XÁC THỰC OTP
+    async function handleStep2(e) {
+      e.preventDefault();
+      const otp = document.getElementById("loginOtp").value.trim();
+      const btn = document.getElementById("btnStep2");
+      const errBox = document.getElementById("step2Error");
+
+      errBox.classList.add("hidden");
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Đang kiểm tra mã...`;
+
+      try {
+        const res = await fetch("/api/admin/verify-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ temp_token: currentTempToken, otp: otp })
+        });
+        const json = await res.json();
+        if (json.success) {
+          checkSession();
+        } else {
+          errBox.innerText = json.error || "Mã OTP không đúng hoặc đã hết hạn!";
+          errBox.classList.remove("hidden");
+        }
+      } catch (err) {
+        errBox.innerText = "Lỗi xác thực: " + err.message;
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>Xác Nhận & Đăng Nhập</span>`;
+      }
+    }
+
+    function backToStep1() {
+      document.getElementById("step2Form").classList.add("hidden");
+      document.getElementById("step1Form").classList.remove("hidden");
+    }
+
+    async function resendOtp() {
+      document.getElementById("loginOtp").value = "";
+      document.getElementById("step2Form").classList.add("hidden");
+      document.getElementById("step1Form").classList.remove("hidden");
+      document.getElementById("btnStep1").click();
+    }
+
+    // ĐĂNG XUẤT
+    async function handleLogout() {
+      await fetch("/api/admin/logout");
+      location.reload();
+    }
+
+    // TẢI VÀ RENDER DỮ LIỆU DASHBOARD
+    async function loadDashboardData() {
+      const res = await fetch("/api/admin/data");
+      if (res.ok) {
+        globalData = await res.json();
+        renderDashboard(globalData);
+      }
+    }
+
+    function renderDashboard(data) {
+      document.getElementById("displayClientIp").innerText = data.client_ip || "Không rõ";
+
+      const reg = data.profiles.registered || {};
+      const unreg = data.profiles.unregistered || {};
+      
+      const regKeys = Object.keys(reg);
+      const unregKeys = Object.keys(unreg);
+
+      // Thống kê
+      document.getElementById("statRegistered").innerText = regKeys.length;
+      document.getElementById("statUnregistered").innerText = unregKeys.length;
+
+      let allIps = new Set();
+      let regDl = 0;
+      regKeys.forEach(p => {
+        (reg[p].ips || []).forEach(ip => allIps.add(ip));
+        regDl += (reg[p].download_count || 0);
+      });
+
+      let unregDl = 0;
+      unregKeys.forEach(ip => {
+        if (ip) allIps.add(ip);
+        unregDl += (unreg[ip].download_count || 0);
+      });
+
+      document.getElementById("statTotalIps").innerText = allIps.size;
+      document.getElementById("statTotalDownloads").innerText = regDl + unregDl;
+      document.getElementById("statDownloadDetail").innerText = `${regDl} thành viên / ${unregDl} vãng lai`;
+
+      // Render Bảng Người Dùng Đã Đăng Ký
+      const regTbody = document.getElementById("registeredTableBody");
+      if (regKeys.length === 0) {
+        regTbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400 italic">Chưa có người dùng đăng ký SĐT nào</td></tr>`;
+      } else {
+        const sortedReg = regKeys.sort((a,b) => (reg[b].last_seen || '').localeCompare(reg[a].last_seen || ''));
+        regTbody.innerHTML = sortedReg.map((phone, idx) => {
+          const u = reg[phone];
+          const ipsList = (u.ips && u.ips.length > 0) 
+            ? u.ips.map(ip => `<span class="inline-block bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono text-[11px] mr-1 mb-1 border border-slate-200">${ip}</span>`).join('')
+            : `<span class="text-slate-400 italic">Chưa rõ</span>`;
+          
+          const roleBadge = u.is_vip 
+            ? `<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold text-[10px]">VIP ⭐</span>`
+            : `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">Thường</span>`;
+
+          return `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="py-2.5 px-3 text-center text-slate-400">${idx + 1}</td>
+              <td class="py-2.5 px-3 font-semibold text-slate-800 font-mono">${phone}</td>
+              <td class="py-2.5 px-3">${u.name || 'Khách hàng'}</td>
+              <td class="py-2.5 px-3 font-mono text-slate-600">${u.telegram_id || '-'}</td>
+              <td class="py-2.5 px-3 max-w-xs">${ipsList}</td>
+              <td class="py-2.5 px-3 text-center font-bold text-slate-700">${u.download_count || 0}</td>
+              <td class="py-2.5 px-3 text-slate-500 text-[11px]">${u.last_seen || '-'}</td>
+              <td class="py-2.5 px-3 text-center">${roleBadge}</td>
+              <td class="py-2.5 px-3 text-center">
+                <button onclick="deleteUser('registered', '${phone}')" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition" title="Xóa hồ sơ">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Bảng Người Dùng Vãng Lai (IP)
+      const unregTbody = document.getElementById("unregisteredTableBody");
+      if (unregKeys.length === 0) {
+        unregTbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-400 italic">Chưa có người dùng vãng lai nào</td></tr>`;
+      } else {
+        const sortedUnreg = unregKeys.sort((a,b) => (unreg[b].download_count || 0) - (unreg[a].download_count || 0));
+        unregTbody.innerHTML = sortedUnreg.map((ip, idx) => {
+          const u = unreg[ip];
+          return `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="py-2.5 px-3 text-center text-slate-400">${idx + 1}</td>
+              <td class="py-2.5 px-3 font-mono font-semibold text-blue-600">${ip}</td>
+              <td class="py-2.5 px-3 text-slate-500 max-w-xs truncate" title="${u.user_agent || ''}">${u.user_agent || 'Trình duyệt'}</td>
+              <td class="py-2.5 px-3 text-center font-bold text-slate-700">${u.download_count || 0}</td>
+              <td class="py-2.5 px-3 text-slate-500 text-[11px]">${u.first_seen || '-'}</td>
+              <td class="py-2.5 px-3 text-slate-500 text-[11px]">${u.last_seen || '-'}</td>
+              <td class="py-2.5 px-3 text-center">
+                <button onclick="deleteUser('unregistered', '${ip}')" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition" title="Xóa IP">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Render Tab Cài đặt (Settings)
+      if (data.auth_info) {
+        document.getElementById("adminUsernameInput").value = data.auth_info.username || "superadmin";
+        document.getElementById("adminPhoneInput").value = data.auth_info.phone || "66828702479";
+        
+        const idContainer = document.getElementById("telegramIdList");
+        const ids = data.auth_info.admin_telegram_ids || [8390033789];
+        idContainer.innerHTML = ids.map((id, index) => {
+          const isPrimary = index === 0;
+          return `
+            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-id-badge text-blue-500"></i>
+                <code class="font-bold text-slate-800">${id}</code>
+                ${isPrimary ? '<span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-semibold">Chính</span>' : ''}
+              </div>
+              ${ids.length > 1 ? `
+                <button onclick="handleRemoveTelegramId('${id}')" class="text-red-500 hover:text-red-700 text-xs p-1">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              ` : '<span class="text-[11px] text-slate-400">Không thể xóa ID duy nhất</span>'}
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Tải markdown gốc
+      fetch("/report.md")
+        .then(r => r.text())
+        .then(md => document.getElementById("rawMarkdownContent").innerText = md)
+        .catch(() => {});
+    }
+
+    // XÓA NGƯỜI DÙNG (CALL API)
+    async function deleteUser(type, id) {
+      const label = type === 'registered' ? `hồ sơ SĐT: ${id}` : `địa chỉ IP: ${id}`;
+      if (!confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn ${label}?`)) return;
+
+      try {
+        const res = await fetch("/api/admin/delete-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, id })
+        });
+        const json = await res.json();
+        if (json.success) {
+          loadDashboardData();
+        } else {
+          alert("Lỗi khi xóa: " + (json.error || "Không rõ nguyên nhân"));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối: " + err.message);
+      }
+    }
+
+    // THÊM TELEGRAM ID MỚI
+    async function handleAddTelegramId(e) {
+      e.preventDefault();
+      const newId = document.getElementById("newTelegramId").value.trim();
+      if (!newId || isNaN(newId)) {
+        alert("Vui lòng nhập Telegram ID dạng số hợp lệ!");
+        return;
+      }
+      try {
+        const res = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add_telegram_id", telegram_id: newId })
+        });
+        const json = await res.json();
+        if (json.success) {
+          document.getElementById("newTelegramId").value = "";
+          loadDashboardData();
+          alert("✅ Đã thêm Telegram ID thành công! Mã OTP lần tới sẽ gửi tới cả ID này.");
+        } else {
+          alert(json.error || "Lỗi cập nhật");
+        }
+      } catch (err) {
+        alert("Lỗi: " + err.message);
+      }
+    }
+
+    // XÓA TELEGRAM ID
+    async function handleRemoveTelegramId(id) {
+      if (!confirm(`Xác nhận xóa Telegram ID ${id} khỏi danh sách nhận OTP?`)) return;
+      try {
+        const res = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "remove_telegram_id", telegram_id: id })
+        });
+        const json = await res.json();
+        if (json.success) {
+          loadDashboardData();
+        } else {
+          alert(json.error || "Lỗi xóa ID");
+        }
+      } catch (err) {
+        alert("Lỗi: " + err.message);
+      }
+    }
+
+    // ĐỔI USERNAME / PASSWORD
+    async function handleUpdateCredentials(e) {
+      e.preventDefault();
+      const u = document.getElementById("adminUsernameInput").value.trim();
+      const ph = document.getElementById("adminPhoneInput").value.trim();
+      const p = document.getElementById("adminNewPassword").value.trim();
+      const statusBox = document.getElementById("credStatus");
+
+      statusBox.className = "text-xs p-2.5 rounded-lg bg-blue-50 text-blue-700";
+      statusBox.innerText = "Đang lưu thay đổi...";
+      statusBox.classList.remove("hidden");
+
+      try {
+        const res = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update_credentials", username: u, phone: ph, password: p })
+        });
+        const json = await res.json();
+        if (json.success) {
+          statusBox.className = "text-xs p-2.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200";
+          statusBox.innerText = "✅ Đã lưu cập nhật tài khoản SuperAdmin thành công!";
+          document.getElementById("adminNewPassword").value = "";
+          setTimeout(() => statusBox.classList.add("hidden"), 4000);
+        } else {
+          statusBox.className = "text-xs p-2.5 rounded-lg bg-red-50 text-red-700 border border-red-200";
+          statusBox.innerText = "❌ Lỗi: " + (json.error || "Không thể lưu");
+        }
+      } catch (err) {
+        statusBox.className = "text-xs p-2.5 rounded-lg bg-red-50 text-red-700 border border-red-200";
+        statusBox.innerText = "❌ Lỗi: " + err.message;
+      }
+    }
+
+    // CHUYỂN TABS
+    function switchTab(tab) {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.getElementById("tabAnalytics").classList.add("hidden");
+      document.getElementById("tabSettings").classList.add("hidden");
+      document.getElementById("tabMarkdown").classList.add("hidden");
+
+      if (tab === 'analytics') {
+        document.getElementById("tabBtnAnalytics").classList.add("active");
+        document.getElementById("tabAnalytics").classList.remove("hidden");
+      } else if (tab === 'settings') {
+        document.getElementById("tabBtnSettings").classList.add("active");
+        document.getElementById("tabSettings").classList.remove("hidden");
+      } else if (tab === 'markdown') {
+        document.getElementById("tabBtnMarkdown").classList.add("active");
+        document.getElementById("tabMarkdown").classList.remove("hidden");
+      }
+    }
+  </script>
+</body>
+</html>
