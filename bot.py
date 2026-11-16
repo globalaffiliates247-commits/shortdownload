@@ -1273,6 +1273,44 @@ def handle_khoa(message):
     else:
         bot.reply_to(message, f"ℹ️ User ID <code>{target_id}</code> không có trong danh sách VIP.", parse_mode="HTML")
 
+@bot.message_handler(commands=['deluser', 'delprofile', 'xoauser'])
+def handle_del_user(message):
+    if not is_admin_user(message.from_user.id, message.chat.id):
+        bot.reply_to(message, "⛔ Lệnh không hợp lệ.")
+        return
+
+    parts = (message.text or "").strip().split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ Cú pháp: <code>/deluser &lt;SĐT hoặc IP&gt;</code>\nVí dụ: <code>/deluser 0912345678</code> hoặc <code>/deluser 113.161.x.x</code>", parse_mode="HTML")
+        return
+
+    target = parts[1].strip()
+    profiles = load_user_profiles()
+    reg = profiles.setdefault("registered", {})
+    unreg = profiles.setdefault("unregistered", {})
+
+    deleted = False
+    clean_target = re.sub(r'[^\d+]', '', target)
+
+    if clean_target and clean_target in reg:
+        del reg[clean_target]
+        deleted = True
+    elif target in unreg:
+        del unreg[target]
+        deleted = True
+    else:
+        # Thử tìm theo IP nằm trong mảng ips của registered
+        for p, u in list(reg.items()):
+            if target in u.get("ips", []):
+                u["ips"].remove(target)
+                deleted = True
+
+    if deleted:
+        save_user_profiles(profiles)
+        bot.reply_to(message, f"🗑️ <b>Đã xóa hồ sơ người dùng:</b> <code>{target}</code> thành công khỏi hệ thống thống kê định danh.", parse_mode="HTML")
+    else:
+        bot.reply_to(message, f"ℹ️ Không tìm thấy hồ sơ người dùng với SĐT hoặc IP: <code>{target}</code>.", parse_mode="HTML")
+
 @bot.message_handler(commands=['danhsach'])
 def handle_danhsach(message):
     if not is_admin_user(message.from_user.id, message.chat.id):
