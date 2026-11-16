@@ -26,59 +26,47 @@
           <i class="fa-solid fa-shield-halved text-2xl"></i>
         </div>
         <h1 class="text-xl font-bold text-slate-900">SuperAdmin Control Center</h1>
-        <p class="text-xs text-slate-500 mt-1">Xác thực 2 lớp bảo mật qua Telegram cá nhân</p>
+        <p class="text-xs text-slate-500 mt-1">Xác thực 1 chạm bảo mật qua Telegram OTP</p>
       </div>
 
-      <!-- BƯỚC 1: NHẬP USERNAME / PASSWORD -->
-      <form id="step1Form" onsubmit="handleStep1(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">Tên đăng nhập hoặc SĐT</label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-              <i class="fa-solid fa-user text-sm"></i>
-            </span>
-            <input type="text" id="loginUsername" required placeholder="superadmin hoặc 66828702479" 
-              class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+      <!-- BƯỚC 1: BẤM NÚT NHẬN MÃ OTP VỀ TELEGRAM -->
+      <div id="step1Box" class="space-y-5">
+        <div class="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 text-center space-y-2">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/30 mb-1">
+            <i class="fa-brands fa-telegram text-2xl"></i>
           </div>
+          <h3 class="text-sm font-bold text-slate-800">Đăng Nhập Qua Telegram OTP</h3>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            Không cần nhớ mật khẩu. Bấm nút bên dưới, hệ thống sẽ gửi mã OTP 6 số bảo mật trực tiếp về Telegram cá nhân của bạn.
+          </p>
         </div>
 
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">Mật khẩu Quản trị</label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-              <i class="fa-solid fa-lock text-sm"></i>
-            </span>
-            <input type="password" id="loginPassword" required placeholder="Nhập mật khẩu" 
-              class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
-          </div>
-        </div>
+        <div id="step1Error" class="hidden text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-200"></div>
 
-        <div id="step1Error" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
-
-        <button type="submit" id="btnStep1" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2">
-          <span>Tiếp tục & Nhận mã OTP</span>
-          <i class="fa-solid fa-arrow-right text-xs"></i>
+        <button type="button" onclick="requestOtp()" id="btnRequestOtp" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/25 transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-paper-plane text-xs"></i>
+          <span>Gửi Mã OTP Về Telegram</span>
         </button>
 
         <p class="text-[11px] text-center text-slate-400">
-          Mã OTP sẽ được gửi tự động về Telegram ID: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">8390033789</code>
+          Mã sẽ được gửi tới Telegram ID cá nhân: <code class="bg-slate-100 text-slate-700 font-mono px-1.5 py-0.5 rounded">8390033789</code>
         </p>
-      </form>
+      </div>
 
       <!-- BƯỚC 2: NHẬP MÃ OTP QUA TELEGRAM -->
       <form id="step2Form" onsubmit="handleStep2(event)" class="space-y-4 hidden">
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
-          <div class="font-semibold flex items-center gap-1.5">
-            <i class="fa-brands fa-telegram text-blue-600 text-sm"></i>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-800 space-y-1">
+          <div class="font-bold flex items-center gap-1.5">
+            <i class="fa-brands fa-telegram text-emerald-600 text-base"></i>
             <span>Mã OTP đã được gửi về Telegram!</span>
           </div>
-          <p class="text-[11px] text-blue-600">Vui lòng kiểm tra tin nhắn bot gửi tới Telegram ID của bạn để lấy mã 6 chữ số.</p>
+          <p class="text-[11px] text-emerald-700">Vui lòng kiểm tra tin nhắn Bot vừa gửi đến Telegram của bạn để lấy mã 6 chữ số.</p>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">Mã xác thực 6 chữ số</label>
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Nhập mã xác thực 6 chữ số</label>
           <input type="text" id="loginOtp" required maxlength="6" placeholder="123456" 
-            class="w-full text-center tracking-widest text-xl font-mono py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+            class="w-full text-center tracking-widest text-2xl font-mono py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
         </div>
 
         <div id="step2Error" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200"></div>
@@ -92,7 +80,7 @@
           <button type="button" onclick="backToStep1()" class="text-slate-500 hover:text-slate-800 hover:underline">
             &larr; Quay lại
           </button>
-          <button type="button" onclick="resendOtp()" id="btnResendOtp" class="text-blue-600 hover:underline font-medium">
+          <button type="button" onclick="requestOtp()" id="btnResendOtp" class="text-blue-600 hover:underline font-medium">
             Gửi lại mã OTP
           </button>
         </div>
@@ -292,32 +280,26 @@
           </p>
         </div>
 
-        <!-- CARD 2: ĐỔI TÊN ĐĂNG NHẬP & MẬT KHẨU -->
+        <!-- CARD 2: THÔNG TIN QUẢN TRỊ VIÊN -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-4">
           <div class="border-b border-slate-100 pb-3">
             <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-              <i class="fa-solid fa-key text-amber-500"></i>
-              <span>Đổi Tài Khoản & Mật Khẩu SuperAdmin</span>
+              <i class="fa-solid fa-user-gear text-blue-600"></i>
+              <span>Thông Tin Quản Trị Viên SuperAdmin</span>
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">Thay đổi thông tin đăng nhập dùng để truy cập trang quản trị này.</p>
+            <p class="text-xs text-slate-500 mt-0.5">Hệ thống áp dụng cơ chế xác thực Telegram OTP trực tiếp (không cần mật khẩu).</p>
           </div>
 
           <form onsubmit="handleUpdateCredentials(event)" class="space-y-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập SuperAdmin</label>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Tên quản trị viên / Username</label>
               <input type="text" id="adminUsernameInput" required 
                 class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Số điện thoại Admin</label>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Số điện thoại SuperAdmin</label>
               <input type="text" id="adminPhoneInput" required 
-                class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1">Mật khẩu mới (Để trống nếu không muốn đổi)</label>
-              <input type="password" id="adminNewPassword" placeholder="Nhập mật khẩu mới an toàn" 
                 class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
 
@@ -378,7 +360,7 @@
     function showLogin() {
       document.getElementById("loginSection").classList.remove("hidden");
       document.getElementById("dashboardSection").classList.add("hidden");
-      document.getElementById("step1Form").classList.remove("hidden");
+      document.getElementById("step1Box").classList.remove("hidden");
       document.getElementById("step2Form").classList.add("hidden");
     }
 
@@ -388,40 +370,61 @@
       renderDashboard(data);
     }
 
-    // XỬ LÝ BƯỚC 1: SUBMIT USER/PASS -> NHẬN OTP
-    async function handleStep1(e) {
-      e.preventDefault();
-      const u = document.getElementById("loginUsername").value.trim();
-      const p = document.getElementById("loginPassword").value.trim();
-      const btn = document.getElementById("btnStep1");
+    // YÊU CẦU GỬI MÃ OTP VỀ TELEGRAM
+    async function requestOtp() {
+      const btn = document.getElementById("btnRequestOtp");
+      const resendBtn = document.getElementById("btnResendOtp");
       const errBox = document.getElementById("step1Error");
+      const errBox2 = document.getElementById("step2Error");
 
-      errBox.classList.add("hidden");
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Đang gửi mã OTP về Telegram...`;
+      if (errBox) errBox.classList.add("hidden");
+      if (errBox2) errBox2.classList.add("hidden");
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Đang gửi mã OTP về Telegram...`;
+      }
+      if (resendBtn) {
+        resendBtn.disabled = true;
+        resendBtn.innerText = `Đang gửi...`;
+      }
 
       try {
-        const res = await fetch("/api/admin/login", {
+        const res = await fetch("/api/admin/send-otp", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, password: p })
+          headers: { "Content-Type": "application/json" }
         });
         const json = await res.json();
         if (json.success && json.step === "otp_required") {
           currentTempToken = json.temp_token;
-          document.getElementById("step1Form").classList.add("hidden");
+          document.getElementById("step1Box").classList.add("hidden");
           document.getElementById("step2Form").classList.remove("hidden");
-          document.getElementById("loginOtp").focus();
+          const otpInput = document.getElementById("loginOtp");
+          otpInput.value = "";
+          otpInput.focus();
         } else {
-          errBox.innerText = json.error || "Tên đăng nhập hoặc mật khẩu không chính xác.";
-          errBox.classList.remove("hidden");
+          const msg = json.error || "Không thể gửi OTP. Vui lòng thử lại sau.";
+          if (!document.getElementById("step1Box").classList.contains("hidden")) {
+            errBox.innerText = msg;
+            errBox.classList.remove("hidden");
+          } else {
+            errBox2.innerText = msg;
+            errBox2.classList.remove("hidden");
+          }
         }
       } catch (err) {
-        errBox.innerText = "Lỗi kết nối máy chủ: " + err.message;
-        errBox.classList.remove("hidden");
+        const msg = "Lỗi kết nối máy chủ: " + err.message;
+        if (errBox) { errBox.innerText = msg; errBox.classList.remove("hidden"); }
+        if (errBox2) { errBox2.innerText = msg; errBox2.classList.remove("hidden"); }
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = `<span>Tiếp tục & Nhận mã OTP</span> <i class="fa-solid fa-arrow-right text-xs"></i>`;
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-paper-plane text-xs"></i> <span>Gửi Mã OTP Về Telegram</span>`;
+        }
+        if (resendBtn) {
+          resendBtn.disabled = false;
+          resendBtn.innerText = `Gửi lại mã OTP`;
+        }
       }
     }
 
@@ -460,14 +463,7 @@
 
     function backToStep1() {
       document.getElementById("step2Form").classList.add("hidden");
-      document.getElementById("step1Form").classList.remove("hidden");
-    }
-
-    async function resendOtp() {
-      document.getElementById("loginOtp").value = "";
-      document.getElementById("step2Form").classList.add("hidden");
-      document.getElementById("step1Form").classList.remove("hidden");
-      document.getElementById("btnStep1").click();
+      document.getElementById("step1Box").classList.remove("hidden");
     }
 
     // ĐĂNG XUẤT

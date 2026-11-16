@@ -38,6 +38,7 @@ ADMIN_AUTH_FILE = os.path.join(DATA_DIR, "admin_auth.json")
 # Bộ nhớ phiên làm việc SuperAdmin và hàng chờ mã OTP 2FA
 PENDING_ADMIN_OTPS = {}   # temp_token -> {"otp": "...", "expires_at": ts, "username": "..."}
 ACTIVE_ADMIN_SESSIONS = {} # session_token -> {"username": "...", "ip": "...", "created_at": ts}
+LAST_OTP_REQUEST_TIME = {} # ip -> last_request_timestamp
 
 def load_admin_auth():
     """Tải thông tin tài khoản SuperAdmin từ admin_auth.json"""
@@ -990,33 +991,34 @@ class WebAppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/admin/login":
+        if parsed.path in ["/api/admin/login", "/api/admin/send-otp"]:
             client_ip = get_client_ip(self)
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
+            now = time.time()
+            
+            # Chống spam: Mỗi IP chỉ được yêu cầu OTP cách nhau tối thiểu 10 giây
+            last_req = LAST_OTP_REQUEST_TIME.get(client_ip, 0)
+            if now - last_req < 10:
+                remaining = int(10 - (now - last_req))
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": f"Vui lòng đợi {remaining} giây trước khi yêu cầu mã OTP tiếp theo!"
+                }).encode('utf-8'))
+                return
+
+            LAST_OTP_REQUEST_TIME[client_ip] = now
+            auth = load_admin_auth()
+
             try:
-                data = json.loads(body.decode('utf-8'))
-                u = (data.get("username") or "").strip().lower()
-                p = (data.get("password") or "").strip()
-                auth = load_admin_auth()
-
-                valid_user = (u == auth.get("username", "").lower() or u == auth.get("phone", "").lower())
-                valid_pass = (p == auth.get("password", ""))
-
-                if not valid_user or not valid_pass:
-                    self.send_response(401)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"success": False, "error": "Tên đăng nhập hoặc mật khẩu không chính xác!"}).encode('utf-8'))
-                    return
-
-                # Sinh OTP 6 số
+                # Sinh mã OTP ngẫu nhiên 6 số
                 otp = f"{random.randint(100000, 999999)}"
                 temp_token = secrets.token_hex(16)
                 PENDING_ADMIN_OTPS[temp_token] = {
                     "otp": otp,
                     "expires_at": time.time() + 300,
-                    "username": auth.get("username"),
+                    "username": auth.get("username", "superadmin"),
                     "ip": client_ip
                 }
 
@@ -1026,7 +1028,7 @@ class WebAppHandler(BaseHTTPRequestHandler):
                 otp_msg = (
                     f"🔐 <b>MÃ XÁC THỰC ĐĂNG NHẬP BACKEND TAIO</b>\n\n"
                     f"Mã OTP của bạn là: <code>{otp}</code>\n\n"
-                    f"• <b>Tài khoản:</b> {auth.get('username')}\n"
+                    f"• <b>Tài khoản:</b> {auth.get('username', 'SuperAdmin')}\n"
                     f"• <b>Địa chỉ IP yêu cầu:</b> <code>{client_ip}</code>\n"
                     f"• <b>Thời gian:</b> {now_str}\n"
                     f"• <b>Thiết bị:</b> <i>{user_agent}</i>\n\n"
