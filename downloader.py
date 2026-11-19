@@ -43,10 +43,11 @@ def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """
     Chuẩn hóa video tương thích iOS siêu tốc (an toàn tuyệt đối cho 512MB RAM):
     - Video TikTok: Giữ nguyên 100% (đã chuẩn H.264 + AAC từ CDN), không tốn 1ms CPU.
-    - Video khác (FB/YouTube):
-      + Luôn sao chép luồng hình ảnh (-c:v copy). TUYỆT ĐỐI KHÔNG RE-ENCODE (-c:v libx264) để tránh OOM 512MB RAM!
-      + Chỉ chuyển đổi âm thanh sang AAC nếu là Opus/Vorbis (chỉ tốn ~10MB RAM, 0.2s).
-      + Gắn cờ +faststart cho iOS.
+    - Video khác (FB/YouTube/Threads):
+      + Kiểm tra codec hình ảnh (vcodec) và âm thanh (acodec) bằng ffprobe.
+      + Nếu vcodec là AV1 (av01) hoặc VP9 (vp09): iOS Photos KHÔNG hỗ trợ lưu vào Ảnh. Bắt buộc chuyển sang H.264.
+      + Nếu vcodec đã là H.264/HEVC và acodec là AAC: Chạy -c copy -movflags +faststart siêu tốc (~0.05s) để iOS Photos lưu ngay lập tức.
+      + Nếu âm thanh là Opus/Vorbis: Chuyển sang AAC chuẩn iOS.
     """
     if not filepath or not filepath.endswith(".mp4") or not os.path.exists(filepath):
         return filepath
@@ -64,10 +65,18 @@ def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     base_name = os.path.basename(filepath)
     temp_ios_file = os.path.join(dir_name, f"ios_compat_{base_name}")
 
+    v_codec = "h264"
     a_codec = "aac"
 
     if ffprobe_bin:
         try:
+            res_v = subprocess.run(
+                [ffprobe_bin, "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5
+            )
+            v_codec = res_v.stdout.strip().lower()
+
             res_a = subprocess.run(
                 [ffprobe_bin, "-v", "error", "-select_streams", "a:0",
                  "-show_entries", "stream=codec_name", "-of", "csv=p=0", filepath],
@@ -77,24 +86,48 @@ def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
         except Exception:
             pass
 
-    # Nếu audio đã là aac hoặc mp4a thì file mp4 đã chuẩn 100%, không cần chạy ffmpeg
-    if a_codec in ["aac", "mp4a"]:
-        return filepath
+    is_v_compat = v_codec in ["h264", "avc", "avc1", "hevc", "h265", "hvc1"]
+    is_a_compat = a_codec in ["aac", "mp4a", ""]
 
-    # Chỉ chuyển đổi âm thanh sang AAC, hình ảnh sao chép nguyên bản (-c:v copy)
-    cmd = [
-        ffmpeg_bin, "-y", "-i", filepath,
-        "-c:v", "copy",
-        "-c:a", "aac", "-b:a", "128k",
-        "-movflags", "+faststart",
-        temp_ios_file
-    ]
+    if is_v_compat and is_a_compat:
+        # Đã là H.264 + AAC, chỉ cần đảm bảo moov atom ở đầu (+faststart) siêu tốc
+        cmd = [
+            ffmpeg_bin, "-y", "-i", filepath,
+            "-c", "copy",
+            "-movflags", "+faststart",
+            temp_ios_file
+        ]
+        timeout_sec = 10
+    elif not is_v_compat:
+        # Video dùng AV1 hoặc VP9 -> iOS Photos app hoàn toàn không nhận diện được
+        print(f"[*] Phát hiện codec video {v_codec} không tương thích iOS Photos. Đang chuyển đổi sang H.264...")
+        a_args = ["-c:a", "copy"] if is_a_compat else ["-c:a", "aac", "-b:a", "128k"]
+        cmd = [
+            ffmpeg_bin, "-y", "-i", filepath,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-pix_fmt", "yuv420p"
+        ] + a_args + [
+            "-movflags", "+faststart",
+            temp_ios_file
+        ]
+        timeout_sec = 45
+    else:
+        # Video là H.264 nhưng audio là Opus/Vorbis -> chuyển đổi audio sang AAC
+        print(f"[*] Chuyển đổi audio {a_codec} sang AAC cho iOS...")
+        cmd = [
+            ffmpeg_bin, "-y", "-i", filepath,
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            temp_ios_file
+        ]
+        timeout_sec = 20
 
     try:
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_sec)
         if proc.returncode == 0 and os.path.exists(temp_ios_file) and os.path.getsize(temp_ios_file) > 1000:
             os.replace(temp_ios_file, filepath)
-            print("[✓] Đã chuẩn hóa âm thanh AAC tương thích iOS an toàn RAM.")
+            print("[✓] Đã chuẩn hóa video tương thích iOS Photos (H.264 + AAC + faststart).")
     except Exception as e:
         print(f"[!] Bỏ qua bước chuẩn hóa iOS do: {e}")
         if os.path.exists(temp_ios_file):
@@ -513,11 +546,11 @@ def download_video(url: str, output_dir: str = None) -> str:
     ydl = get_yt_dlp()
     outtmpl = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
-    # Ưu tiên tuyệt đối H.264 (AVC) và AAC để tránh tải VP9/AV1 gây tràn RAM 512MB
+    # Ưu tiên tuyệt đối H.264 (AVC) và AAC để đảm bảo tương thích 100% với iOS Photos & TikTok
     ydl_opts = get_base_ydl_opts()
     ydl_opts.update({
         'outtmpl': outtmpl,
-        'format': 'bv*+ba/b',
+        'format': 'bv*[vcodec^=avc]+ba[acodec^=mp4a]/b[vcodec^=avc]/hd/sd/b/bv*+ba',
         'merge_output_format': 'mp4',
         'quiet': False,
         'postprocessor_args': {
