@@ -2165,6 +2165,8 @@ def handle_message(message):
         platform = "Threads"
     elif "youtube.com" in text.lower() or "youtu.be" in text.lower():
         platform = "YouTube"
+    elif "linkedin.com" in text.lower() or "lnkd.in" in text.lower():
+        platform = "LinkedIn"
 
     user_key = f"tg_{user_id}"
 
@@ -2303,10 +2305,20 @@ def handle_message(message):
                 f"2. Bấm tiện ích <b>TAIO Cookie Exporter</b> -> Bấm <b>Tải file cookies.txt</b>.\n"
                 f"3. <b>Gửi trực tiếp file <code>cookies.txt</code> mới vào khung chat bot này!</b> (Bot sẽ tự động kích hoạt ngay)."
             )
-        else:
+        elif "LinkedIn" in err_str or "linkedin" in err_str.lower() or platform == "LinkedIn":
             error_text = (
-                f"❌ <b>Có lỗi xảy ra:</b>\n<code>{err_str}</code>\n\n"
-                f"💡 Mẹo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
+                f"🔒 <b>Không thể tải video LinkedIn!</b>\n\n"
+                f"LinkedIn yêu cầu đăng nhập để xem video này. Bot không thể tải các video LinkedIn vì:\n"
+                f"• Video bị giới hạn chỉ cho thành viên đăng nhập\n"
+                f"• LinkedIn chặn tải xuống tự động từ máy chủ\n\n"
+                f"💡 <b>Gợi ý:</b> Nếu video này là của bạn hoặc được chia sẻ công khai, "
+                f"bạn có thể dùng tính năng <i>Lưu video</i> trên app LinkedIn hoặc copy link video trực tiếp từ bài đăng."
+            )
+        else:
+            import html as _html
+            error_text = (
+                f"❌ <b>Có lỗi xảy ra:</b>\n<code>{_html.escape(err_str[:300])}</code>\n\n"
+                f"💡 Mẻo: Hãy thử gửi lại link hoặc kiểm tra video có đặt ở chế độ riêng tư không nhé."
             )
         safe_edit(chat_id, msg_id, error_text)
     finally:
