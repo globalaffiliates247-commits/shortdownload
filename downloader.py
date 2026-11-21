@@ -39,6 +39,33 @@ def is_threads_url(url: str) -> bool:
     u = url.lower()
     return "threads.net" in u or "threads.com" in u
 
+def is_linkedin_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return "linkedin.com" in u or "lnkd.in" in u
+
+def resolve_short_url(url: str) -> str:
+    """
+    Theo dõi redirect của short URL (lnkd.in, bit.ly, v.v.) và trả về URL cuối cùng.
+    Nếu không resolve được, trả về URL gốc.
+    """
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            url,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+                              'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT) as resp:
+            final_url = resp.geturl()
+            return final_url
+    except Exception as e:
+        print(f"[!] Không thể resolve short URL {url}: {e}")
+        return url
+
 def ensure_ios_compatibility(filepath: str, is_tiktok: bool = False) -> str:
     """
     Chuẩn hóa video tương thích iOS siêu tốc (an toàn tuyệt đối cho 512MB RAM):
@@ -523,24 +550,41 @@ def extract_info(url: str):
 
 def download_video(url: str, output_dir: str = None) -> str:
     """
-    Tải video từ YouTube, Facebook Reel, TikTok.
+    Tải video từ YouTube, Facebook Reel, TikTok, LinkedIn.
     - Với TikTok: Tải qua API trực tiếp cực nhanh không logo.
     - Với YouTube, Facebook: Sử dụng bộ giải mã yt-dlp chuyên dụng, ưu tiên H.264 + AAC tự nhiên.
+    - Với LinkedIn (lnkd.in): Resolve short URL trước, kiểm tra login wall, báo lỗi thân thiện.
     """
     if output_dir is None:
         output_dir = os.path.expanduser("~/Downloads")
     os.makedirs(output_dir, exist_ok=True)
 
+    # 0. RESOLVE SHORT URL: Nếu là lnkd.in hoặc LinkedIn, raise lỗi thân thiện ngay
+    resolved_url = url
+    if is_linkedin_url(url):
+        # Thử resolve để lấy URL đích thực
+        resolved_url = resolve_short_url(url)
+        print(f"[*] LinkedIn URL resolved: {url} -> {resolved_url}")
+        # Dù URL resolve thành công hay thất bại (vẫn là LinkedIn/lnkd.in),
+        # LinkedIn luôn yêu cầu đăng nhập để xem video → báo lỗi thân thiện ngay
+        raise RuntimeError(
+            "LinkedIn yêu cầu đăng nhập để xem video này.\n"
+            "LinkedIn không cho phép tải video tự động từ máy chủ vì video "
+            "yêu cầu tài khoản đăng nhập. Vui lòng kiểm tra xem video có công khai không."
+        )
+
     # 1. ĐỐI VỚI THREADS: Bóc tách trực tiếp luồng MP4 công khai
-    if is_threads_url(url):
-        return download_threads_video(url, output_dir)
+    if is_threads_url(resolved_url):
+        return download_threads_video(resolved_url, output_dir)
 
     # 2. ĐỐI VỚI TIKTOK: Ưu tiên kênh tải trực tiếp
-    if is_tiktok_url(url):
+    if is_tiktok_url(resolved_url):
         try:
-            return download_tiktok_fallback(url, output_dir)
+            return download_tiktok_fallback(resolved_url, output_dir)
         except Exception as e:
             print(f"[!] Kênh tải trực tiếp: {e}. Đang chuyển sang kênh dự phòng yt-dlp...")
+    
+    url = resolved_url
 
     # 2. ĐỐI VỚI YOUTUBE / FACEBOOK / DỰ PHÒNG: Dùng yt-dlp
     ydl = get_yt_dlp()
